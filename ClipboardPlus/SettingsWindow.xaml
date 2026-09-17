@@ -1,0 +1,44 @@
+<Window x:Class="ClipboardPlus.SettingsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Clipboard Plus · Settings" Style="{StaticResource {x:Type Window}}" Width="650" Height="760" MinWidth="540" MinHeight="500" WindowStartupLocation="CenterOwner">
+ <DockPanel Margin="28">
+  <StackPanel DockPanel.Dock="Top" Margin="0,0,0,18"><TextBlock Text="Make it yours" FontSize="26" FontWeight="SemiBold"/><TextBlock Text="Fast by default. Flexible when you need it." Foreground="{DynamicResource MutedBrush}" Margin="0,6,0,0"/></StackPanel>
+  <StackPanel DockPanel.Dock="Bottom" Margin="0,16,0,0"><TextBlock x:Name="ErrorLabel" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/><DockPanel><Button Content="Save settings" Style="{StaticResource AccentButton}" Click="Save_Click" DockPanel.Dock="Right" IsDefault="True"/><Button Content="Cancel" Click="Cancel_Click" HorizontalAlignment="Left" IsCancel="True"/></DockPanel></StackPanel>
+  <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,0,14,0">
+   <TextBlock Text="SHORTCUT &amp; BEHAVIOR" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold"/>
+   <CheckBox x:Name="WinV" Content="Use Win + V for Clipboard Plus" Checked="WinV_Changed" Unchecked="WinV_Changed"/>
+   <TextBlock Text="Opens Clipboard Plus with Win + V. Choose below whether Windows should also keep its own history." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
+   <TextBlock Text="Custom shortcut" Margin="0,16,0,6"/>
+   <DockPanel><Button x:Name="RecordButton" Content="Record shortcut…" Click="Record_Click" DockPanel.Dock="Right" Margin="10,0,0,0"/><Border Background="{DynamicResource CardBrush}" CornerRadius="8" Padding="12"><TextBlock x:Name="HotkeyBox" VerticalAlignment="Center" FontWeight="SemiBold" AutomationProperties.Name="Assigned shortcut"/></Border></DockPanel>
+   <TextBlock Text="Click Record shortcut, press 1–3 keys together, then choose Use this shortcut. Single keys such as F12 or ScrLk work too." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,8,0,0"/>
+   <TextBlock x:Name="WindowsHint" Text="Windows keeps Win + V when you use a custom shortcut." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" FontSize="12" Margin="0,6,0,0"/>
+   <TextBlock Text="Windows clipboard history" Margin="0,16,0,6"/>
+   <ComboBox x:Name="WindowsHistoryBox" AutomationProperties.Name="Windows clipboard history preference"><ComboBoxItem Content="Automatic — off for Win+V, on for other shortcuts"/><ComboBoxItem Content="Always on"/><ComboBoxItem Content="Always off"/><ComboBoxItem Content="Leave the Windows setting unchanged"/></ComboBox>
+   <TextBlock x:Name="WindowsHistoryStatus" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,8,0,0"/>
+   <Button Content="Open Windows clipboard settings ↗" HorizontalAlignment="Left" Margin="0,10,0,6" Click="WindowsSettings_Click"/>
+   <CheckBox x:Name="StartupBox" Content="Start quietly when I sign in to Windows"/>
+   <CheckBox x:Name="HideBox" Content="Hide the panel after pasting"/>
+   <TextBlock Text="HISTORY &amp; RESOURCE BUDGETS" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold" Margin="0,24,0,12"/>
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+    <TextBlock Text="Maximum history items" VerticalAlignment="Center"/><TextBox x:Name="ItemsBox" Grid.Column="1" Margin="0,4" AutomationProperties.Name="Maximum history items"/>
+    <TextBlock Text="Keep unpinned items (days)" Grid.Row="1" VerticalAlignment="Center"/><TextBox x:Name="DaysBox" Grid.Row="1" Grid.Column="1" Margin="0,4" AutomationProperties.Name="Retention days"/>
+    <TextBlock Text="History disk budget (MB)" Grid.Row="2" VerticalAlignment="Center"/><TextBox x:Name="DiskBox" Grid.Row="2" Grid.Column="1" Margin="0,4" AutomationProperties.Name="Disk budget MB"/>
+    <TextBlock Text="Memory cache budget (MB)" Grid.Row="3" VerticalAlignment="Center"/><TextBox x:Name="CacheBox" Grid.Row="3" Grid.Column="1" Margin="0,4" AutomationProperties.Name="Memory cache MB"/>
+    <TextBlock Text="Maximum single clip (MB)" Grid.Row="4" VerticalAlignment="Center"/><TextBox x:Name="ItemBox" Grid.Row="4" Grid.Column="1" Margin="0,4" AutomationProperties.Name="Maximum clip MB"/>
+   </Grid>
+   <TextBlock Text="History lives on disk. The cache is only a small working set, not a hard cap on total app RAM. Previewing media uses extra memory temporarily. File references do not duplicate source files." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,10,0,8"/>
+   <TextBlock Text="Oldest unpinned clips are removed first. Pins are kept even if they exceed your limits; remove pins or raise the budget if new clips cannot be saved." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
+   <TextBlock x:Name="UsageLabel" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,12"/>
+   <Button Content="Use recommended memory cache" HorizontalAlignment="Left" Click="Recommend_Click"/>
+   <TextBlock Text="PRIVACY &amp; APPEARANCE" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold" Margin="0,24,0,12"/>
+   <TextBlock Text="Do not capture from these apps" Margin="0,0,0,6"/>
+   <ItemsControl x:Name="ExcludedList"><ItemsControl.ItemTemplate><DataTemplate><DockPanel Margin="0,3"><Button Content="Remove" Tag="{Binding}" Click="RemoveApp_Click" DockPanel.Dock="Right" Padding="9,5"/><TextBlock Text="{Binding}" VerticalAlignment="Center" Margin="10,0"/></DockPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+   <Button Content="+ Choose an app…" Click="AddApp_Click" HorizontalAlignment="Left" Margin="0,10"/>
+   <TextBlock Text="Clipboard Plus ignores copies from apps in this list. Password managers are excluded by default. Choose an open app or browse to its .exe file—no process names to type." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,6,0,10"/>
+   <TextBlock Text="Theme" Margin="0,8,0,6"/><ComboBox x:Name="ThemeBox" SelectedIndex="0" AutomationProperties.Name="Theme"><ComboBoxItem Content="Dark"/><ComboBoxItem Content="Light"/></ComboBox>
+   <TextBlock Text="Clip content, titles, and paths are encrypted for this Windows user. Search uses keyed word hashes. Nothing is uploaded. Opening an online preview contacts its source only when you request it." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,16"/>
+   <TextBlock Text="MANAGE HISTORY" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold" Margin="0,12,0,12"/>
+   <WrapPanel><Button Content="Clear unpinned history" Click="ClearUnpinned_Click" Margin="0,0,8,8"/><Button Content="Clear all history…" Click="ClearAll_Click" Margin="0,0,0,8"/></WrapPanel>
+   <TextBlock Text="Original files and folders are never deleted when you clear history." Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap"/>
+   <TextBlock Text="Clipboard Plus 1.1 · Windows desktop" Foreground="{DynamicResource MutedBrush}" FontSize="11" Margin="0,24,0,4"/>
+  </StackPanel></ScrollViewer>
+ </DockPanel>
+</Window>

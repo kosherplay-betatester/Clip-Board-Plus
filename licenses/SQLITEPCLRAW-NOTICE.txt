@@ -1,0 +1,6 @@
+SQLitePCLRaw.core / SQLitePCLRaw.provider.e_sqlite3 / SQLitePCLRaw.bundle_e_sqlite3
+Copyright 2014-2025 SourceGear, LLC
+Licensed under Apache License 2.0; see SQLITEPCLRAW-APACHE-2.0.txt.
+Attribution and license expression taken from the installed NuGet package metadata.
+
+SQLite native library is in the public domain: https://sqlite.org/copyright.html
