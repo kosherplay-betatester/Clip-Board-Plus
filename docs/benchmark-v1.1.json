@@ -1,0 +1,10 @@
+{
+  "benchmark": "10000 text clips",
+  "captureTotalMs": 28883,
+  "searchP50Ms": 11.1354,
+  "searchP95Ms": 12.8082,
+  "Count": 10000,
+  "DiskBytes": 73308880,
+  "cacheBytes": 0,
+  "processWorkingSet": 391798784
+}

@@ -21,7 +21,11 @@ Tested locally on Windows 11 build 26200 with .NET SDK 10.0.303. Results are mea
 
 The test suite also covers protected storage/reopen, keyed search, paging, duplicates, named snippets, pins, expiry, disk eviction, bounded cache, rich/plain text, bitmap/PNG formats, bounded thumbnails, mixed file/folder references, missing sources, background initialization without showing/focusing a window, and real clipboard update/replay with pause and exclusion flags.
 
+- Post-publication manual update check contacted the live GitHub latest-release endpoint and correctly reported 1.1.0 as current; all 52 checks in that run passed.
+
 ## Performance record
+
+The final 1.1 self-contained build saved 10,000 synthetic text clips in 28.9 seconds. Across 100 indexed searches, median latency was 11.1 ms and p95 was 12.8 ms; reported storage was 69.9 MiB. The test process working set after the complete core suite and benchmark was 373.6 MiB, with zero bytes in the payload cache at sampling. This is a post-workload measurement, not idle RAM, a maximum, or a whole-process budget guarantee. All 51 core checks passed in this run.
 
 The earlier 1.0 text-focused 10,000-entry benchmark wrote in 26.8 seconds, with indexed query median 10.8 ms and p95 11.4 ms; database plus WAL used 62.8 MiB. This is historical evidence, not a new 1.1 benchmark or a universal latency guarantee. Total process RAM includes .NET, UI, images and media decoders beyond the bounded serialized-payload cache.
 
