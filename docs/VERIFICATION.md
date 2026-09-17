@@ -2,7 +2,16 @@
 
 Tested locally on Windows 11 build 26200 with .NET SDK 10.0.303. Results are measurements on this machine, not guarantees for every PC, app, or media codec.
 
-## Current release checks
+## Corrected 1.1 build 2 checks
+
+- Final self-contained build passed 75 storage, selection, clipboard, preview, shortcut and media checks. The separate interactive run passed 58 checks, including three consecutive native pastes with different clicked rows while an older selection and nonempty queue remained present.
+- Live packaged-app testing in Notepad opened history by Ctrl+Shift+V twice and double-clicked two different items. Both arrived at the original text caret in the correct order. Copy (2) also placed both selected texts on the clipboard in list order and pasted them correctly into Notepad.
+- Regression coverage includes selection changes during an asynchronous refresh, preservation of multiple selections, five consecutive clipboard writes, mixed text/files/images, duplicate paths, missing-source rejection and single-item rich text preservation.
+- Installer probe passed nine install/upgrade/uninstall checks. Setup now has a consent-first graceful shutdown path for build 2 and uses Restart Manager for older installed builds. Silent setup refuses to close a running production app.
+- Build 2 binaries have file version 1.1.0.2. The public release remains 1.1.0 as requested; its old assets are replaced. Existing original 1.1 users should redownload the installer because that older update checker compares release versions, not replacement build numbers.
+- Current history and media screenshots were rendered from synthetic fixtures and inspected.
+
+## Original 1.1 release checks
 
 - Downloaded both published 1.1.0 assets from GitHub Releases and verified them against the published SHA-256 checksums. Extracted the downloaded portable ZIP and ran its executable independently of the build directory: all 52 core and live update-check tests passed.
 - Release build: zero warnings and zero errors.

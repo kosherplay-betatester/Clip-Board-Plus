@@ -22,6 +22,7 @@ public sealed class ClipboardService : IDisposable
     private uint queuedSequence;
     private bool paused;
     private bool disposed;
+    private readonly SemaphoreSlim writes = new(1, 1);
     public bool Paused { get => Volatile.Read(ref paused); set => Volatile.Write(ref paused, value); }
     public ClipboardService(AppSettings settings, Func<ClipPayload, Task> save, Action<string> status)
     {
@@ -156,18 +157,62 @@ public sealed class ClipboardService : IDisposable
         }
         return data;
     }
-    public async Task PutAsync(ClipPayload payload, bool plain = false)
+    internal static System.Windows.DataObject CreateManyData(IReadOnlyList<ClipPayload> payloads, string exportRoot)
+    {
+        if (payloads.Count == 0) throw new ArgumentException("Select at least one item.");
+        if (payloads.Count == 1) return CreateData(payloads[0], false);
+        var data = new System.Windows.DataObject();
+        data.SetData("ClipboardPlus.Internal", new MemoryStream([1]), false);
+        var paths = payloads.SelectMany(p => p.Kind == ClipKind.Files ? p.Paths : []).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (paths.Any(p => !File.Exists(p) && !Directory.Exists(p))) throw new FileNotFoundException("A selected source file or folder is unavailable. No items were copied.");
+        var text = string.Join(Environment.NewLine, payloads.Where(p => p.Kind is ClipKind.Text or ClipKind.Link).Select(p => p.Text));
+        if (text.Length > 0) data.SetText(text);
+        var images = payloads.Where(p => p.Kind == ClipKind.Image && p.Image is not null).ToArray();
+        if (images.Length > 0)
+        {
+            Directory.CreateDirectory(exportRoot);
+            // Only our own PNG exports expire. Never touch original source files.
+            foreach (var old in Directory.EnumerateFiles(exportRoot, "clip-*.png"))
+                if (System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(old), @"^clip-[A-F0-9]{64}\.png$") && File.GetLastWriteTimeUtc(old) < DateTime.UtcNow.AddDays(-7))
+                    try { File.Delete(old); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            var exports = images.Select(image => (Image: image, Path: Path.Combine(exportRoot, "clip-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(image.Image!)) + ".png"))).DistinctBy(x => x.Path).ToArray();
+            long existingBytes = Directory.EnumerateFiles(exportRoot, "clip-*.png").Sum(p => new FileInfo(p).Length);
+            long addedBytes = exports.Where(x => !File.Exists(x.Path)).Sum(x => x.Image.Image!.LongLength);
+            if (existingBytes + addedBytes > 256 * 1048576L) throw new InvalidOperationException("Temporary image copies reached 256 MB. Copy images individually, or remove old files from the CopyExports folder when you no longer need them.");
+            foreach (var export in exports)
+            {
+                File.WriteAllBytes(export.Path, export.Image.Image!); paths.Add(export.Path);
+            }
+            if (images.Length == 1)
+            {
+                var imageData = CreateData(images[0], false);
+                data.SetImage(imageData.GetImage()); data.SetData("PNG", new MemoryStream(images[0].Image!));
+            }
+        }
+        if (paths.Count > 0)
+        {
+            var files = new StringCollection(); files.AddRange(paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+            data.SetFileDropList(files); data.SetData("Preferred DropEffect", new MemoryStream(BitConverter.GetBytes(1)));
+        }
+        return data;
+    }
+    public Task<uint> PutAsync(ClipPayload payload, bool plain = false) => PutDataAsync(() => CreateData(payload, plain));
+    public Task<uint> PutManyAsync(IReadOnlyList<ClipPayload> payloads) => PutDataAsync(() => CreateManyData(payloads,
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipboardPlus", "CopyExports")));
+    private async Task<uint> PutDataAsync(Func<System.Windows.DataObject> create)
     {
         await Ready;
-        await dispatcher.InvokeAsync(async () =>
+        await writes.WaitAsync();
+        try { return await dispatcher.InvokeAsync(async () =>
         {
-            var data = CreateData(payload, plain);
+            var data = create();
             for (int attempt = 0; ; attempt++)
             {
-                try { System.Windows.Clipboard.SetDataObject(data, true); ignoredSequence = Native.GetClipboardSequenceNumber(); return; }
+                try { System.Windows.Clipboard.SetDataObject(data, true); ignoredSequence = Native.GetClipboardSequenceNumber(); return ignoredSequence; }
                 catch (ExternalException) when (attempt < 5) { await Task.Delay(25 * (attempt + 1)); }
             }
-        }).Task.Unwrap();
+        }).Task.Unwrap(); }
+        finally { writes.Release(); }
     }
     public void Dispose()
     {

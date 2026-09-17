@@ -41,19 +41,17 @@ DisableReadyPage=no
 Compression=lzma2
 SolidCompression=yes
 OutputBaseFilename=ClipboardPlus-Setup-{#AppVersion}-win-x64
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#AppVersion}.2
 VersionInfoDescription=Clipboard Plus Setup
 CloseApplications=yes
+CloseApplicationsFilter=ClipboardPlus.exe
 RestartApplications=no
-#ifndef InstallerTest
-AppMutex=Local\ClipboardPlus-{username}
-#endif
 
 [Messages]
 SetupAppRunningError=%1 is still running in the system tray.%n%nRight-click its tray icon and choose Exit, then click OK to continue setup. Closing the history panel alone keeps the app running.
 UninstallAppRunningError=%1 is still running in the system tray.%n%nRight-click its tray icon and choose Exit, then click OK to continue uninstalling. Your saved history will be kept.
 WelcomeLabel1=Welcome to Clipboard Plus
-WelcomeLabel2=Your clipboard, with room for more.%n%nSetup will install Clipboard Plus for your Windows account. No administrator access or separate .NET installation is needed.%n%nYour saved clipboard history stays in place when upgrading. Close Clipboard Plus from its tray menu before continuing.
+WelcomeLabel2=Your clipboard, with room for more.%n%nSetup will install Clipboard Plus for your Windows account. No administrator access or separate .NET installation is needed.%n%nYour saved clipboard history stays in place when upgrading. If the app is running, setup will ask before closing it. Save any unfinished snippet edits first.
 FinishedHeadingLabel=Clipboard Plus is ready
 FinishedLabel=Copy something, then press Ctrl+Shift+V to find it.%n%nYou can record your own shortcut, choose Win+V, and adjust history limits in Settings. Closing the panel keeps the app in your system tray.
 
@@ -75,6 +73,55 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{app}\ClipboardPlus.exe"; Description: "Open Clipboard Plus"; Flags: nowait postinstall skipifsilent
 
 [Code]
+function OpenEvent(Access: LongWord; Inherit: Boolean; Name: String): THandle;
+  external 'OpenEventW@kernel32.dll stdcall';
+function SignalEvent(Event: THandle): Boolean;
+  external 'SetEvent@kernel32.dll stdcall';
+function CloseHandle(Handle: THandle): Boolean;
+  external 'CloseHandle@kernel32.dll stdcall';
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var Event: THandle; Attempt: Integer;
+begin
+  Result := '';
+#ifndef InstallerTest
+  if not CheckForMutexes(ExpandConstant('Local\ClipboardPlus-{username}')) then Exit;
+  if WizardSilent then begin
+    Result := 'Clipboard Plus is running. Close it first, or run setup interactively to approve closing it.';
+    Exit;
+  end;
+  Event := OpenEvent(2, False, ExpandConstant('Local\ClipboardPlus-InstallerExit-{username}'));
+  if Event = 0 then Exit; { Older installed versions use the Restart Manager consent page. }
+  try
+    if MsgBox('Clipboard Plus is running. Close it now to install this version?' + #13#10#13#10 +
+      'Your saved history and settings will be kept. Finish or save any open snippet edits first.',
+      mbConfirmation, MB_YESNO or MB_DEFBUTTON2) <> IDYES then begin
+      Result := 'The app was left running. Close it when ready, then retry setup.';
+      Exit;
+    end;
+    if not SignalEvent(Event) then begin Result := 'Could not ask the app to close. Exit it from the tray and retry.'; Exit; end;
+    for Attempt := 1 to 100 do begin
+      if not CheckForMutexes(ExpandConstant('Local\ClipboardPlus-{username}')) then Exit;
+      Sleep(100);
+    end;
+    Result := 'The app is still finishing an operation. Exit it from the tray, then retry setup.';
+  finally
+    CloseHandle(Event);
+  end;
+#endif
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+#ifndef InstallerTest
+  if CheckForMutexes(ExpandConstant('Local\ClipboardPlus-{username}')) then begin
+    if not UninstallSilent then MsgBox('Exit Clipboard Plus from its tray menu before uninstalling. Your saved history will be kept.', mbInformation, MB_OK);
+    Result := False;
+  end;
+#endif
+end;
+
 procedure InitializeWizard;
 var Existing, Selected: String;
 begin

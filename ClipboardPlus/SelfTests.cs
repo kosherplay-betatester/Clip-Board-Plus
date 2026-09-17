@@ -107,6 +107,14 @@ internal static class SelfTests
             var bitmap = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8); var imageData = new System.Windows.DataObject(); imageData.SetImage(bitmap);
             var image = ClipboardService.ReadPayload(imageData, "Test", 100000)!;
             Check(image.Kind == ClipKind.Image && ClipboardService.CreateData(image, false).ContainsImage(), "Direct bitmap capture and replay");
+            var batchRoot = Path.Combine(root, "copy-exports");
+            var batch = ClipboardService.CreateManyData([new() { Text = "Caption one" }, filePayload, image, new() { Text = "Caption two" }, filePayload], batchRoot);
+            Check(batch.GetText() == "Caption one" + Environment.NewLine + "Caption two" && batch.GetFileDropList().Count == 3 && batch.ContainsImage(), "Mixed selection includes ordered text, deduplicated file references and image formats");
+            Check(File.ReadAllBytes(batch.GetFileDropList()[2]!).SequenceEqual(image.Image!) && File.ReadAllText(fixture) == "fixture", "Batch image export preserves original pixels without copying source files");
+            Check(ClipboardService.CreateManyData([captured], batchRoot).GetDataPresent(DataFormats.Rtf), "Single-item batch preserves rich text formats");
+            Check(ClipboardService.CreateManyData([new() { Text = "One" }, new() { Text = "Two" }], batchRoot).GetText() == "One" + Environment.NewLine + "Two", "Multiple text selections combine in supplied order");
+            bool missingBatch = false; try { ClipboardService.CreateManyData([filePayload with { Paths = [Path.Combine(root, "absent.mp4")] }, image], batchRoot); } catch (FileNotFoundException) { missingBatch = true; }
+            Check(missingBatch, "Missing source aborts whole batch rather than silently copying partial selection");
             var pngOnly = new System.Windows.DataObject(); pngOnly.SetData("PNG", new MemoryStream(image.Image!));
             Check(ClipboardService.ReadPayload(pngOnly, "Test", 100000)!.Image!.SequenceEqual(image.Image!), "PNG-only clipboard image preserves its original encoded bytes");
             using (var imageStore = new HistoryStore(Path.Combine(root, "images"), new()))
@@ -117,6 +125,7 @@ internal static class SelfTests
                 var otherData = new System.Windows.DataObject(); otherData.SetImage(BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, Enumerable.Repeat((byte)255, 16).ToArray(), 8));
                 await imageStore.AddAsync(ClipboardService.ReadPayload(otherData, "Other image", 100000)!);
                 Check(await MainWindow.VerifyPreviewRoutingAsync(imageStore), "Second image preview opens its own payload even with the first image selected and open");
+                Check(await MainWindow.VerifySelectionRefreshAsync(imageStore), "Refresh preserves multiple selection and never restores selection captured before an asynchronous query");
             }
             using (var bounded = new HistoryStore(Path.Combine(root, "bounded"), new AppSettings { DiskBudgetMb = 32, MaxItemMb = 4 }))
             {
@@ -141,7 +150,12 @@ internal static class SelfTests
             if (args.Contains("--clipboard-test")) await ClipboardIntegrationAsync(Check);
             if (args.Contains("--input-test"))
             {
-                var previous = System.Windows.Clipboard.GetDataObject();
+                System.Windows.IDataObject? previous;
+                for (int attempt = 0; ; attempt++)
+                {
+                    try { previous = System.Windows.Clipboard.GetDataObject(); break; }
+                    catch (System.Runtime.InteropServices.ExternalException) when (attempt < 30) { await Task.Delay(100); }
+                }
                 try
                 {
                     using var pasteStore = new HistoryStore(Path.Combine(root, "paste"), new());
@@ -159,7 +173,7 @@ internal static class SelfTests
                         target.Show();
                         await clicked.Task.WaitAsync(TimeSpan.FromMinutes(2));
                         var main = new MainWindow(pasteStore, new(), true); main.Show();
-                        Check(await main.VerifyPasteAsync(target, destination, expected), "Panel selection restores destination focus and pastes through native Ctrl+V");
+                        Check(await main.VerifyPasteAsync(target, destination, expected), "Native paste repeats with three different double-clicked rows, stale selection and nonempty queue");
                     }
                     finally { target.Close(); }
                 }
@@ -225,7 +239,14 @@ internal static class SelfTests
             check(received.TryDequeue(out var clip) && clip.Text == "Clipboard Plus integration fixture", "Real WM_CLIPBOARDUPDATE capture on dedicated STA thread");
             await service.PutAsync(new() { Text = "Clipboard Plus replay fixture" });
             await Task.Delay(150);
-            check(System.Windows.Clipboard.GetText() == "Clipboard Plus replay fixture" && received.IsEmpty, "Real clipboard replay succeeds without capture feedback loop");
+            bool replayMatches = System.Windows.Clipboard.GetText() == "Clipboard Plus replay fixture";
+            if (!replayMatches || !received.IsEmpty) throw new InvalidOperationException($"Replay mismatch: matches={replayMatches}, captures={received.Count}, owner={Native.ProcessName(Native.GetClipboardOwner())}, sequence={Native.GetClipboardSequenceNumber()}");
+            check(true, "Real clipboard replay succeeds without capture feedback loop");
+            for (int i = 0; i < 5; i++)
+            {
+                uint sequence = await service.PutAsync(new() { Text = $"Fresh replay {i}" });
+                check(System.Windows.Clipboard.GetText() == $"Fresh replay {i}" && Native.GetClipboardSequenceNumber() == sequence, $"Clipboard write {i + 1} completes with fresh content before paste");
+            }
             var privateData = new System.Windows.DataObject(); privateData.SetText("Do not retain this synthetic fixture"); privateData.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream([1]));
             System.Windows.Clipboard.SetDataObject(privateData, true); await Task.Delay(150);
             check(received.IsEmpty, "Real capture respects history exclusion format");

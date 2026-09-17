@@ -7,7 +7,7 @@ namespace ClipboardPlus;
 public sealed class HotkeyService : IDisposable
 {
     private HwndSource source = null!;
-    private readonly Action<IntPtr> show;
+    private readonly Action<PasteDestination> show;
     private readonly Native.HookProc hookProc;
     private readonly Dispatcher callbackDispatcher;
     private Dispatcher workerDispatcher = null!;
@@ -22,7 +22,7 @@ public sealed class HotkeyService : IDisposable
     private int activeId = 701;
     internal bool IsWinVActive => hook != IntPtr.Zero && hooked == new HotkeySpec(8, 0x56);
     internal bool IsHookActive => hook != IntPtr.Zero;
-    public HotkeyService(IntPtr hwnd, Action<IntPtr> show)
+    public HotkeyService(IntPtr hwnd, Action<PasteDestination> show)
     {
         this.show = show; hookProc = KeyboardHook; callbackDispatcher = Dispatcher.CurrentDispatcher;
         thread = new Thread(() =>
@@ -78,7 +78,7 @@ public sealed class HotkeyService : IDisposable
     }
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wp, IntPtr lp, ref bool handled)
     {
-        if (msg == 0x312 && wp.ToInt32() == activeId) { var target = Native.GetForegroundWindow(); callbackDispatcher.BeginInvoke(() => show(target)); handled = true; }
+        if (msg == 0x312 && wp.ToInt32() == activeId) { var target = Native.CaptureDestination(Native.GetForegroundWindow()); callbackDispatcher.BeginInvoke(() => show(target)); handled = true; }
         return IntPtr.Zero;
     }
     private IntPtr KeyboardHook(int code, IntPtr wp, IntPtr lp)
@@ -91,7 +91,7 @@ public sealed class HotkeyService : IDisposable
             {
                 if (down && !hookKeyDown)
                 {
-                    var target = Native.GetForegroundWindow();
+                    var target = Native.CaptureDestination(Native.GetForegroundWindow());
                     if ((spec.Modifiers & 8) != 0) Native.MaskWindowsMenu();
                     callbackDispatcher.BeginInvoke(() => show(target));
                 }

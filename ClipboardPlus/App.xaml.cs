@@ -6,6 +6,8 @@ namespace ClipboardPlus;
 public partial class App : System.Windows.Application
 {
     private Mutex? mutex;
+    private EventWaitHandle? installerExit;
+    private RegisteredWaitHandle? installerWait;
     public static string DataRoot { get; private set; } = "";
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -42,6 +44,11 @@ public partial class App : System.Windows.Application
             var window = new MainWindow(store, settings, demo);
             MainWindow = window;
             await window.InitializeAsync();
+            if (!demo)
+            {
+                installerExit = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\ClipboardPlus-InstallerExit-" + Environment.UserName);
+                installerWait = ThreadPool.RegisterWaitForSingleObject(installerExit, (_, _) => Dispatcher.BeginInvoke(() => window.ExitForInstaller()), null, Timeout.Infinite, false);
+            }
             if (!e.Args.Contains("--background")) window.Show();
             int proofIndex = Array.IndexOf(e.Args, "--render-proof");
             int fixtureIndex = Array.IndexOf(e.Args, "--media-fixtures");
@@ -66,5 +73,5 @@ public partial class App : System.Windows.Application
         };
         foreach (var (key, color) in colors) Current.Resources[key] = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(color));
     }
-    protected override void OnExit(ExitEventArgs e) { mutex?.Dispose(); base.OnExit(e); }
+    protected override void OnExit(ExitEventArgs e) { installerWait?.Unregister(null); installerExit?.Dispose(); mutex?.Dispose(); base.OnExit(e); }
 }

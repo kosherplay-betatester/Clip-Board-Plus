@@ -2,6 +2,16 @@
 
 ## 1.1.0
 
+### Corrected release — build 2
+
+- Double-click pastes the clicked row, independently of stale selection or a pending paste queue.
+- Asynchronous refresh preserves current multi-selection instead of restoring an earlier selection.
+- Captures destination window and native focused control when the shortcut fires; verifies focus, window identity and clipboard contents before injecting paste.
+- Serializes copy/paste operations and waits for mouse/shortcut release to prevent overlapping actions from replacing a pending paste.
+- Adds copy icons per row and beside Recent clips, Ctrl+C for selected history, and a text-only caption action.
+- Multi-copy combines text and file references; copied image pixels can be exported as PNG attachments. The receiving app chooses supported formats.
+- Setup asks permission before closing the running app. Declining leaves it running; silent setup refuses to close it without interactive consent.
+
 - Added a branded per-user installer with shortcut/startup choices, upgrade support, and Windows Apps uninstall.
 - Added an on-demand update check and direct release-page link; no automatic updating.
 

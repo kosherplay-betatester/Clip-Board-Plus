@@ -23,6 +23,9 @@
 
 ## Feature highlights
 
+- **Accurate repeat pasting:** double-click acts on the clicked item, keeps its destination snapshot, and checks focus and clipboard changes before sending paste.
+- **Copy one or many:** each row has a copy icon; select several clips and use **Copy (count)** beside Recent clips, or Ctrl+C while the list is focused. Combine text, file references and image attachments in one clipboard operation.
+- **Captions when you need them:** Actions → Copy selected text only copies the text from a mixed selection separately. Messaging apps decide whether to accept text, attachments, or both; the app never sends messages for you.
 - **Record shortcuts:** click a button and press one key or a combination of up to three keys. Supports F12, ScrLk, Ctrl+D, Ctrl+Shift+V, and Win+V.
 - **Correct image previews:** each thumbnail opens the image you clicked, including when multiple items are selected or another preview is open.
 - **Media on the clip:** play/pause/stop, a time track, and 10-second skips on audio and video rows. Audio plays inline; video opens a simple player with full screen.
@@ -42,6 +45,8 @@ A native Windows clipboard history app built with .NET 10, WPF, Windows clipboar
 [Browse every release and its notes](https://github.com/kosherplay-betatester/Clip-Board-Plus/releases). Requires Windows 10 version 2004 or later / Windows 11, x64.
 
 Download **ClipboardPlus-Setup-1.1.0-win-x64.exe** from GitHub Releases and follow the setup wizard. It installs for your Windows account without administrator privileges and offers a desktop shortcut, optional startup at sign-in, and launch on completion. Updates reuse the same installation; your separate clipboard history is preserved. Uninstall through Windows Apps.
+
+The corrected **1.1 build 2** replaces the original 1.1 download. If you installed the earlier 1.1 release, download the installer again and reinstall; Settings shows the build number. Setup asks before closing a running app and keeps it running if you decline. Silent setup will not close a running app automatically.
 
 Prefer portable? Extract **ClipboardPlus-win-x64.zip** into a permanent folder and run **ClipboardPlus.exe**. Both downloads include .NET and work offline after download.
 
@@ -91,6 +96,7 @@ Windows history collection and shortcut handling are separate. You can also open
 - The disk budget includes live database pages and the search index. WAL transactions can temporarily use additional space. Oldest unpinned items are evicted first. Pins survive limits; if pins alone exhaust a budget, new unpinned captures may be rejected. Deletion reclaims pages and checkpoints the WAL.
 - Existing files/folders are stored by reference, including grouped selections. No source file contents are imported into history. Historical file operations replay as **copy**, never as a stale cut/move. The destination app performs the transfer. A changed source means changed content; unavailable paths cannot be pasted.
 - Screenshots and directly copied image pixels must be saved because they may have no source file. PNG payloads live in the protected database; the list uses small thumbnails. Previews decode to at most 2,400 pixels on the longest edge. External image loading is limited to 32 MB.
+- When explicitly copying multiple items, image pixels are additionally exported as ordinary, unencrypted PNG files under `%LOCALAPPDATA%\ClipboardPlus\CopyExports` so other apps can attach them. This separate export folder is limited to 256 MB; exports older than seven days are removed during a later image batch copy. They are not deleted when a destination might still need them immediately. Original videos, audio, files and folders remain references. A combined selection is limited to 128 MB of image/text data. Single-image copy retains the normal bitmap/PNG clipboard formats without creating an export file.
 - App exclusions use process names. Clipboard exclusion flags are respected. Pause capture immediately from the sidebar or tray. These measures cannot identify every password or secret automatically.
 
 Data is stored in `%LOCALAPPDATA%\ClipboardPlus`. `settings.json` contains preferences; `history.db` and `search.key` belong together. Do not expect DPAPI-protected history to open under a different Windows account. There is no automatic file snapshot, cloud sync, or cross-account migration.

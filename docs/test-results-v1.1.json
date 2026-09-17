@@ -180,6 +180,26 @@
     "result": "passed"
   },
   {
+    "test": "Mixed selection includes ordered text, deduplicated file references and image formats",
+    "result": "passed"
+  },
+  {
+    "test": "Batch image export preserves original pixels without copying source files",
+    "result": "passed"
+  },
+  {
+    "test": "Single-item batch preserves rich text formats",
+    "result": "passed"
+  },
+  {
+    "test": "Multiple text selections combine in supplied order",
+    "result": "passed"
+  },
+  {
+    "test": "Missing source aborts whole batch rather than silently copying partial selection",
+    "result": "passed"
+  },
+  {
     "test": "PNG-only clipboard image preserves its original encoded bytes",
     "result": "passed"
   },
@@ -189,6 +209,10 @@
   },
   {
     "test": "Second image preview opens its own payload even with the first image selected and open",
+    "result": "passed"
+  },
+  {
+    "test": "Refresh preserves multiple selection and never restores selection captured before an asynchronous query",
     "result": "passed"
   },
   {
@@ -209,6 +233,26 @@
   },
   {
     "test": "Real clipboard replay succeeds without capture feedback loop",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard write 1 completes with fresh content before paste",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard write 2 completes with fresh content before paste",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard write 3 completes with fresh content before paste",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard write 4 completes with fresh content before paste",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard write 5 completes with fresh content before paste",
     "result": "passed"
   },
   {
@@ -257,7 +301,7 @@
   },
   {
     "summary": "passed",
-    "passed": 64,
-    "elapsedMs": 8399
+    "passed": 75,
+    "elapsedMs": 8685
   }
 ]

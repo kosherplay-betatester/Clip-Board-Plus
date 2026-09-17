@@ -17,7 +17,7 @@ public partial class SettingsWindow : Window
         WinV.IsChecked = settings.ReplaceWinV; HotkeyBox.Text = settings.Hotkey;
         WindowsHistoryBox.SelectedIndex = settings.WindowsHistoryMode switch { "On" => 1, "Off" => 2, "Unchanged" => 3, _ => 0 };
         WindowsHistoryStatus.Text = WindowsHistorySettings.Status();
-        VersionLabel.Text = $"Clipboard Plus {UpdateChecker.CurrentVersion} · Windows desktop";
+        VersionLabel.Text = $"Clipboard Plus {UpdateChecker.CurrentVersion} · build {typeof(App).Assembly.GetName().Version!.Revision} · Windows desktop";
         StartupBox.IsChecked = settings.StartWithWindows; HideBox.IsChecked = settings.HideAfterPaste;
         ItemsBox.Text = settings.MaxItems.ToString(); DaysBox.Text = settings.RetentionDays.ToString(); DiskBox.Text = settings.DiskBudgetMb.ToString(); CacheBox.Text = settings.CacheBudgetMb.ToString(); ItemBox.Text = settings.MaxItemMb.ToString();
         foreach (var name in settings.ExcludedApps.Split([';', ',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase)) excluded.Add(name);
