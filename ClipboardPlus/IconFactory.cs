@@ -39,4 +39,22 @@ internal static class IconFactory
         for(int i=0;i<sizes.Length;i++) { writer.Write((byte)(sizes[i]==256?0:sizes[i])); writer.Write((byte)(sizes[i]==256?0:sizes[i])); writer.Write((byte)0); writer.Write((byte)0); writer.Write((ushort)1); writer.Write((ushort)32); writer.Write(images[i].Length); writer.Write(offset); offset+=images[i].Length; }
         foreach(var bytes in images) writer.Write(bytes);
     }
+    internal static void WriteInstallerArt(string directory)
+    {
+        Directory.CreateDirectory(directory);
+        using var art = new Bitmap(656, 1256);
+        using (var g = Graphics.FromImage(art))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit; g.ScaleTransform(4, 4);
+            using var background = new LinearGradientBrush(new Point(0, 0), new Point(164, 314), Color.FromArgb(23, 49, 61), Color.FromArgb(12, 23, 35)); g.FillRectangle(background, 0, 0, 164, 314);
+            using var icon = Render(256); g.DrawImage(icon, 30, 30, 104, 104);
+            using var title = new Font("Segoe UI", 23, FontStyle.Bold, GraphicsUnit.Pixel); using var subtitle = new Font("Segoe UI", 12, FontStyle.Regular, GraphicsUnit.Pixel); using var footer = new Font("Segoe UI", 8, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var white = new SolidBrush(Color.FromArgb(241, 249, 247)); using var mint = new SolidBrush(Color.FromArgb(168, 234, 198));
+            g.DrawString("Clipboard\nPlus", title, white, new RectangleF(18, 156, 132, 67));
+            g.DrawString("Copy once.\nFind it fast.", subtitle, mint, new RectangleF(18, 234, 132, 40));
+            g.DrawString("LOCAL & PRIVATE", footer, white, 18, 292);
+        }
+        art.Save(Path.Combine(directory, "wizard.png"), ImageFormat.Png);
+        using var small = Render(64); small.Save(Path.Combine(directory, "header.png"), ImageFormat.Png);
+    }
 }

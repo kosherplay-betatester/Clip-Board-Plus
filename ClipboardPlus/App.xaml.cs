@@ -10,6 +10,8 @@ public partial class App : System.Windows.Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        int installerArtIndex = Array.IndexOf(e.Args, "--write-installer-art");
+        if (installerArtIndex >= 0 && installerArtIndex + 1 < e.Args.Length) { IconFactory.WriteInstallerArt(e.Args[installerArtIndex + 1]); Shutdown(); return; }
         int iconIndex = Array.IndexOf(e.Args, "--write-icon");
         if (iconIndex >= 0 && iconIndex + 1 < e.Args.Length)
         {
@@ -28,6 +30,11 @@ public partial class App : System.Windows.Application
         try
         {
             var settings = AppSettings.Load(DataRoot);
+            if (!demo)
+            {
+                using var startup = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
+                settings = settings with { StartWithWindows = startup?.GetValue("ClipboardPlus") is string value && !string.IsNullOrWhiteSpace(value) };
+            }
             var store = await Task.Run(() => new HistoryStore(DataRoot, settings));
             await store.MaintainAsync();
             if (demo) await DemoData.SeedAsync(store);

@@ -6,23 +6,54 @@
 
 ![Clipboard Plus history](docs/images/history-dark.png)
 
-## New in 1.1
+## Your clipboard can do more
+
+| When you’re… | Clipboard Plus helps you… |
+| --- | --- |
+| Writing emails or answering customers | Pin reusable replies as named snippets and find them by name. |
+| Researching across tabs | Keep copied quotes and links together, search your history, and combine selected text into notes. |
+| Filling several fields | Queue copied items, then paste the next item with each Enter. |
+| Moving between apps | Paste rich content normally, or use Ctrl+Enter for clean plain text. |
+| Working with screenshots | Click the exact image to enlarge, zoom, pan, or view full screen; extract text with on-device OCR. |
+| Checking an audio or video file | Preview from its original source with playback controls, seeking, and 10-second skips. |
+| Organizing large files and folders | Recall whole selections by their paths, without duplicating the source files in clipboard storage. |
+| Using the same details every day | Pin addresses, instructions, links, and snippets so they survive ordinary history cleanup. |
+
+**Choose your shortcut. Keep more history. Find what you copied. Get back to work.**
+
+## Feature highlights
 
 - **Record shortcuts:** click a button and press one key or a combination of up to three keys. Supports F12, ScrLk, Ctrl+D, Ctrl+Shift+V, and Win+V.
 - **Correct image previews:** each thumbnail opens the image you clicked, including when multiple items are selected or another preview is open.
 - **Media on the clip:** play/pause/stop, a time track, and 10-second skips on audio and video rows. Audio plays inline; video opens a simple player with full screen.
 - **Pick excluded apps:** select an open app or browse to its program, with removable entries instead of a semicolon-separated text field.
 - **Windows history controls:** Automatic, Always on, Always off, or Leave unchanged, with policy restriction detection.
+- **Friendly installer:** per-user setup, desktop/startup choices, Start menu entry, upgrade support, and Windows Apps uninstall.
+- **Manual updates:** Settings → Check for updates, or Open releases. No scheduled checks, automatic downloads or automatic installs.
 - **New icon:** a clipboard with a mint plus badge, rendered at seven sizes for Windows and the tray.
 
 
 A native Windows clipboard history app built with .NET 10, WPF, Windows clipboard APIs, and SQLite. Copy text, rich text, images, links, files, or folders; find them quickly and paste them back into your work.
 
-## Run
+## Download and get started
 
-Extract the release ZIP into a permanent folder and run **ClipboardPlus.exe**. The self-contained Windows x64 release does not require installing .NET. It runs as your normal Windows user, without administrator privileges.
+### [⬇ Download Clipboard Plus for Windows](https://github.com/kosherplay-betatester/Clip-Board-Plus/releases/latest)
+
+[Browse every release and its notes](https://github.com/kosherplay-betatester/Clip-Board-Plus/releases). Requires Windows 10 version 2004 or later / Windows 11, x64.
+
+Download **ClipboardPlus-Setup-1.1.0-win-x64.exe** from GitHub Releases and follow the setup wizard. It installs for your Windows account without administrator privileges and offers a desktop shortcut, optional startup at sign-in, and launch on completion. Updates reuse the same installation; your separate clipboard history is preserved. Uninstall through Windows Apps.
+
+Prefer portable? Extract **ClipboardPlus-win-x64.zip** into a permanent folder and run **ClipboardPlus.exe**. Both downloads include .NET and work offline after download.
 
 The default shortcut is **Ctrl+Shift+V**. Closing the panel keeps capture running in the notification area. Use the tray menu to quit. Startup at sign-in is optional in Settings. It initializes silently in the tray. Keep the extracted folder in a permanent location before enabling startup; moving it later requires saving the startup setting again.
+
+**Stay up to date on your terms:** open Settings → **Check for updates**, then choose whether to visit the releases page and download an installer. The app never installs updates automatically.
+
+## Built to stay out of your way
+
+History lives on disk, with a bounded memory cache and a virtualized list that loads small pages as you browse. Set your own item count, retention period, disk budget, and cache budget; Settings shows current memory use and a suggested cache size for your PC. Files and folders remain references to their original locations, and media decoders are created only when needed and released when previews close.
+
+Everything stays local unless you explicitly open an online source or check GitHub for updates. There are no accounts, subscriptions, telemetry, or background cloud sync. Dark and light themes, a tray menu, and optional quiet startup keep the app close at hand.
 
 ## Everyday use
 
@@ -54,7 +85,7 @@ Windows history collection and shortcut handling are separate. You can also open
 
 - Defaults: **10,000 items**, **90 days** for unpinned entries, **512 MB disk budget**, **32 MB serialized-payload cache**, and **16 MB per saved clip**. All are configurable. The single-clip ceiling is 64 MB.
 - History content, summaries, thumbnails, and file paths are encrypted with Windows DPAPI for the current user. Search stores keyed word hashes rather than readable text. Types, timestamps, sizes, counts, and pin state remain ordinary database metadata. This protects offline files from other accounts; it is not a defense against malicious programs running as the same user.
-- No telemetry, accounts, cloud sync, or background URL fetching. Requested online previews contact their source. Playback starts only after Play; webpage links open in the user's browser.
+- No telemetry, accounts, cloud sync, or background URL fetching. Requested online previews contact their source. Clicking Check for updates contacts GitHub’s public latest-release API and sends the app version in its User-Agent; no clipboard contents are sent. Playback starts only after Play; webpage links open in the user's browser.
 - Only two captures may be in flight. A busy stream or an oversized clip is skipped with a status message. No polling loop runs while idle.
 - The cache is bounded and drops cached payloads under system memory pressure. Settings shows installed RAM, a suggested cache size, and current process usage. The cache budget is **not** a cap on total process memory; .NET, the UI, captured images, and media decoders have their own working memory.
 - The disk budget includes live database pages and the search index. WAL transactions can temporarily use additional space. Oldest unpinned items are evicted first. Pins survive limits; if pins alone exhaust a budget, new unpinned captures may be rejected. Deletion reclaims pages and checkpoints the WAL.
@@ -104,3 +135,14 @@ Demo capture starts paused and data lives separately under `%TEMP%\ClipboardPlus
 Apache License 2.0; see [LICENSE](LICENSE). Existing history is kept under your Windows account when upgrading: quit Clipboard Plus, replace the extracted application files, then launch the new executable. Do not delete your local data folder.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [SECURITY.md](SECURITY.md) for sensitive reports, and [third-party notices](THIRD_PARTY_NOTICES.md) for runtime dependencies. Please include Windows version, shortcut, clip type, and exact reproduction steps in bug reports; never attach private clipboard data.
+
+## Building the installer
+
+Install Inno Setup 6 on the build machine (it is not an app dependency), then:
+
+```powershell
+./scripts/Publish.ps1 -OutputRoot artifacts/releases/v1.1.0
+./scripts/Build-Installer.ps1
+```
+
+The installer and portable ZIP are written to `artifacts/releases/v1.1.0/`. Installer artwork lives under `installer/assets/`; regenerate it with the built app's `--write-installer-art installer/assets` command. `Build-Installer.ps1 -InstallerTest` creates an isolated test product with a separate App ID, shortcuts, and startup registry value; this test installer is never distributed.

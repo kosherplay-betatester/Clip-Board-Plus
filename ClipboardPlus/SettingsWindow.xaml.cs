@@ -10,17 +10,20 @@ public partial class SettingsWindow : Window
     private readonly Func<AppSettings, Task> save;
     private readonly Action<bool>? suspendShortcut;
     private readonly System.Collections.ObjectModel.ObservableCollection<string> excluded = [];
+    private readonly CancellationTokenSource updatesCancellation = new();
     public SettingsWindow(AppSettings settings, HistoryStore store, Func<AppSettings, Task> save, Action<bool>? suspendShortcut = null)
     {
         original = settings; this.store = store; this.save = save; this.suspendShortcut = suspendShortcut; InitializeComponent();
         WinV.IsChecked = settings.ReplaceWinV; HotkeyBox.Text = settings.Hotkey;
         WindowsHistoryBox.SelectedIndex = settings.WindowsHistoryMode switch { "On" => 1, "Off" => 2, "Unchanged" => 3, _ => 0 };
         WindowsHistoryStatus.Text = WindowsHistorySettings.Status();
+        VersionLabel.Text = $"Clipboard Plus {UpdateChecker.CurrentVersion} · Windows desktop";
         StartupBox.IsChecked = settings.StartWithWindows; HideBox.IsChecked = settings.HideAfterPaste;
         ItemsBox.Text = settings.MaxItems.ToString(); DaysBox.Text = settings.RetentionDays.ToString(); DiskBox.Text = settings.DiskBudgetMb.ToString(); CacheBox.Text = settings.CacheBudgetMb.ToString(); ItemBox.Text = settings.MaxItemMb.ToString();
         foreach (var name in settings.ExcludedApps.Split([';', ',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase)) excluded.Add(name);
         ExcludedList.ItemsSource = excluded; ThemeBox.SelectedIndex = settings.Theme == "Light" ? 1 : 0;
         Loaded += async (_, _) => await UpdateUsage();
+        Closed += (_, _) => updatesCancellation.Cancel();
     }
     private async Task UpdateUsage()
     {
@@ -53,6 +56,15 @@ public partial class SettingsWindow : Window
         if (picker.ShowDialog() == true && picker.SelectedProcess is { } name && !excluded.Contains(name, StringComparer.OrdinalIgnoreCase)) excluded.Add(name);
     }
     private void RemoveApp_Click(object sender, RoutedEventArgs e) { if (((Button)sender).Tag is string name) excluded.Remove(name); }
+    private void Releases_Click(object sender, RoutedEventArgs e) => Process.Start(new ProcessStartInfo(UpdateChecker.ReleasesUrl) { UseShellExecute = true });
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateButton.IsEnabled = false; UpdateStatus.Text = "Checking GitHub Releases…";
+        try { UpdateStatus.Text = await UpdateChecker.CheckAsync(updatesCancellation.Token); }
+        catch (OperationCanceledException) { if (!updatesCancellation.IsCancellationRequested) UpdateStatus.Text = "The check timed out. Try again or open the releases page."; }
+        catch (Exception) { UpdateStatus.Text = "Could not check for updates. Check your connection, or open the releases page."; }
+        finally { UpdateButton.IsEnabled = true; }
+    }
     private async void Save_Click(object sender, RoutedEventArgs e)
     {
         try

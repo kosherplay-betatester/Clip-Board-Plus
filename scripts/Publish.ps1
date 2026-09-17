@@ -11,6 +11,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'licenses') -Destination $publish
 $releaseDocs = Join-Path $publishRoot 'docs'
 New-Item -ItemType Directory -Path $releaseDocs -Force | Out-Null
 Copy-Item -Path (Join-Path $projectRoot 'docs\*.md') -Destination $releaseDocs
+Copy-Item -Path (Join-Path $projectRoot 'docs\*.json') -Destination $releaseDocs
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\images') -Destination $releaseDocs -Recurse -Force
 $legacyVerification = Join-Path $publishRoot 'VERIFICATION.md'
 if (Test-Path -LiteralPath $legacyVerification) { Remove-Item -LiteralPath $legacyVerification }

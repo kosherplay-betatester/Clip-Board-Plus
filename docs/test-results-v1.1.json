@@ -140,6 +140,10 @@
     "result": "passed"
   },
   {
+    "test": "Manual update check identifies newer and current release versions",
+    "result": "passed"
+  },
+  {
     "test": "Windows history automatic and independent overrides map to the requested preference",
     "result": "passed"
   },
@@ -228,10 +232,6 @@
     "result": "passed"
   },
   {
-    "test": "Panel selection restores destination focus and pastes through native Ctrl+V",
-    "result": "passed"
-  },
-  {
     "test": "Local audio preview starts on request, advances, and releases player on close",
     "result": "passed"
   },
@@ -258,6 +258,6 @@
   {
     "summary": "passed",
     "passed": 64,
-    "elapsedMs": 31747
+    "elapsedMs": 8399
   }
 ]

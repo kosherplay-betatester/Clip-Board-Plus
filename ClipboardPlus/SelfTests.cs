@@ -83,6 +83,7 @@ internal static class SelfTests
                 Check(await MainWindow.VerifyBackgroundAsync(backgroundStore), "Background startup initializes capture, tray, and shortcut without showing or activating the panel");
             Check(new AppSettings().Excludes("Bitwarden") && !new AppSettings().Excludes("Notepad"), "Excluded app names match exact process names");
             Check(KeyRecorderWindow.Format(6, 0x56) == "Ctrl+Shift+V" && KeyRecorderWindow.Format(0, 0x91) == "ScrLk", "Recorder formats captured key combinations and Scroll Lock");
+            Check(UpdateChecker.Describe("{\"tag_name\":\"v1.2.0\"}", new Version(1, 1, 0)).Contains("is available") && UpdateChecker.Describe("{\"tag_name\":\"v1.1.0\"}", new Version(1, 1, 0, 0)).Contains("up to date"), "Manual update check identifies newer and current release versions");
             Check(WindowsHistorySettings.Desired(new() { ReplaceWinV = true }) == false && WindowsHistorySettings.Desired(new()) == true && WindowsHistorySettings.Desired(new() { ReplaceWinV = true, WindowsHistoryMode = "On" }) == true && WindowsHistorySettings.Desired(new() { WindowsHistoryMode = "Off" }) == false && WindowsHistorySettings.Desired(new() { WindowsHistoryMode = "Unchanged" }) is null, "Windows history automatic and independent overrides map to the requested preference");
             string preferenceFixture = @"Software\ClipboardPlusTests\" + Guid.NewGuid().ToString("N");
             try
@@ -193,6 +194,7 @@ internal static class SelfTests
             int mediaUrlIndex = Array.IndexOf(args, "--media-url");
             if (mediaUrlIndex >= 0 && mediaUrlIndex + 1 < args.Length)
                 Check(await PreviewWindow.VerifyMediaAsync(args[mediaUrlIndex + 1]), "HTTP media preview streams from its original URL and releases playback on close");
+            if (args.Contains("--update-test")) Check((await UpdateChecker.CheckAsync()).Contains("up to date"), "Manual update check reads the published GitHub release");
             if (args.Contains("--benchmark")) await BenchmarkAsync(root, report);
             report.Add(new { summary = "passed", passed, elapsedMs = timer.ElapsedMilliseconds, temporaryData = root });
             await WriteReport(args, report); return 0;

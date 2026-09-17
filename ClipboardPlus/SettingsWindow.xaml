@@ -38,7 +38,10 @@
    <TextBlock Text="MANAGE HISTORY" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold" Margin="0,12,0,12"/>
    <WrapPanel><Button Content="Clear unpinned history" Click="ClearUnpinned_Click" Margin="0,0,8,8"/><Button Content="Clear all history…" Click="ClearAll_Click" Margin="0,0,0,8"/></WrapPanel>
    <TextBlock Text="Original files and folders are never deleted when you clear history." Foreground="{DynamicResource MutedBrush}" FontSize="12" TextWrapping="Wrap"/>
-   <TextBlock Text="Clipboard Plus 1.1 · Windows desktop" Foreground="{DynamicResource MutedBrush}" FontSize="11" Margin="0,24,0,4"/>
+   <TextBlock Text="ABOUT &amp; UPDATES" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold" Margin="0,24,0,12"/>
+   <TextBlock x:Name="VersionLabel" Text="Clipboard Plus" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,10"/>
+   <WrapPanel><Button x:Name="UpdateButton" Content="Check for updates" Click="CheckUpdates_Click" Margin="0,0,8,8"/><Button Content="Open releases ↗" Click="Releases_Click" Margin="0,0,0,8"/></WrapPanel>
+   <TextBlock x:Name="UpdateStatus" Text="Checks only when you ask. Updates are downloaded and installed by you." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
   </StackPanel></ScrollViewer>
  </DockPanel>
 </Window>

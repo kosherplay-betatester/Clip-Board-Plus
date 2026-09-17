@@ -2,6 +2,9 @@
 
 ## 1.1.0
 
+- Added a branded per-user installer with shortcut/startup choices, upgrade support, and Windows Apps uninstall.
+- Added an on-demand update check and direct release-page link; no automatic updating.
+
 - Added a button-based shortcut recorder for one to three keys, including F12 and Scroll Lock.
 - Added shortcut suspension during recording and restoration on cancel.
 - Fixed thumbnail preview routing so the clicked clip is used rather than the previous selection.

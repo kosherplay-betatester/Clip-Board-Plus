@@ -5,7 +5,8 @@ Tested locally on Windows 11 build 26200 with .NET SDK 10.0.303. Results are mea
 ## Current release checks
 
 - Release build: zero warnings and zero errors.
-- **63 checks passed** in the storage, clipboard, shortcut, preview, Windows-preference and local-media regression suite. The final self-contained release passed **64 checks** with the interactive native-paste check included.
+- Branded installer passed nine isolated install/upgrade/uninstall checks, including shortcuts, startup registration, Windows Apps registration and preservation of user-created files. The installed app passed 51 core checks. Production startup preferences were unchanged.
+- **64 checks passed** in the final self-contained build: storage, clipboard, shortcut, preview, Windows-preference, update-version comparison and local-media regressions. An earlier 1.1 self-contained build also passed the interactive native-paste check.
 - Two distinct image payloads opened correctly while both rows were selected and the first preview remained open. Thumbnail actions now carry the clicked row directly.
 - Inline MP3 controls played, paused, sought, stopped and released their decoder. Video row controls opened a player, played H.264 MP4, paused, sought, stopped and released it. WAV and MP4 preview checks also passed.
 - Legacy encrypted media summaries upgraded on demand and exposed the original source reference without importing source media bytes.

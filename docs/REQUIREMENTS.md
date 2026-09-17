@@ -27,3 +27,4 @@ Reports: `artifacts/test-results.json`, `artifacts/published-test-results.json`,
 - Windows history is independently configurable, with Automatic, On, Off and Unchanged modes. Policy restrictions are detected rather than removed. Isolated registry tests verify preference writes.
 - New multi-resolution clipboard-and-plus icon is included in the application and tray.
 - Source, Apache license, README, screenshots, contribution/security documentation, dependency notices and Windows CI workflow are prepared for the user's GitHub repository. Release assets are packaged separately from source.
+- Manual update checking and a release-page link are available in Settings; no automatic updating. A branded per-user installer passes isolated installation, upgrade and uninstall checks.
