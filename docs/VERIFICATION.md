@@ -4,6 +4,7 @@ Tested locally on Windows 11 build 26200 with .NET SDK 10.0.303. Results are mea
 
 ## Current release checks
 
+- Downloaded both published 1.1.0 assets from GitHub Releases and verified them against the published SHA-256 checksums. Extracted the downloaded portable ZIP and ran its executable independently of the build directory: all 52 core and live update-check tests passed.
 - Release build: zero warnings and zero errors.
 - Branded installer passed nine isolated install/upgrade/uninstall checks, including shortcuts, startup registration, Windows Apps registration and preservation of user-created files. The installed app passed 51 core checks. Production startup preferences were unchanged.
 - **64 checks passed** in the final self-contained build: storage, clipboard, shortcut, preview, Windows-preference, update-version comparison and local-media regressions. An earlier 1.1 self-contained build also passed the interactive native-paste check.
@@ -34,5 +35,18 @@ The earlier 1.0 text-focused 10,000-entry benchmark wrote in 26.8 seconds, with 
 - Actual Windows sign-in, other installed apps, elevated destinations, remote sessions, multiple monitors and uncommon scaling/codecs/languages.
 - Policy-free Windows history enable/disable and Win+V interaction with the enabled Windows popup and other shortcut utilities.
 - Online playback is implemented but not end-to-end verified: automatic approval review rejected the local HTTP media test with the reason `blocked by policy`. Local media playback passed.
+
+### Final Windows integration check
+
+Use the published installer or portable 1.1.0 build. These steps change Windows preferences; perform them in a session where those changes are intended. Record the previous settings so they can be restored afterward.
+
+1. On a machine where Windows clipboard history is permitted, enable it in Windows Settings and confirm native Win+V opens its history. If the setting is managed by Shutup10++, remove that specific restriction there first; Clipboard Plus does not remove policies.
+2. In Clipboard Plus, choose Win+V and Automatic Windows history behavior, then save. Copy two harmless test strings. Press Win+V and confirm only Clipboard Plus opens and both strings can be pasted.
+3. Record Ctrl+Shift+V, retain Automatic, and save. Confirm Ctrl+Shift+V opens Clipboard Plus, Windows history reports on, and Win+V opens the Windows panel.
+4. With the custom shortcut still selected, save Always off and then Always on. Confirm the effective Windows setting follows each choice; a saved preference alone is not proof that Windows applied it.
+5. Enable Start with Windows. At the next normal sign-in, confirm Clipboard Plus is present in the tray without opening its panel, captures new copies, and responds to the chosen shortcut. Disable startup and confirm it stays closed after a subsequent sign-in.
+6. For online media, explicitly play a trusted direct MP3/MP4 URL, check pause/seek/stop, then close the preview. A normal video webpage is not a direct media URL. This manual check has not been recorded as passed.
+
+The release is available for use. The checks above remain open verification items, not completed test results.
 
 Local reports and generated fixtures are in ignored `artifacts/`. Committed screenshots under `docs/images/` contain synthetic sample content only. No user clipboard database or user preferences are distributed.

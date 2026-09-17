@@ -26,5 +26,5 @@ Reports: `artifacts/test-results.json`, `artifacts/published-test-results.json`,
 - App exclusions use a searchable open-app picker, executable browser and removable list.
 - Windows history is independently configurable, with Automatic, On, Off and Unchanged modes. Policy restrictions are detected rather than removed. Isolated registry tests verify preference writes.
 - New multi-resolution clipboard-and-plus icon is included in the application and tray.
-- Source, Apache license, README, screenshots, contribution/security documentation, dependency notices and Windows CI workflow are prepared for the user's GitHub repository. Release assets are packaged separately from source.
+- Source, Apache license, README, screenshots, contribution/security documentation, dependency notices and Windows CI workflow are pushed to the user's GitHub repository. Version 1.1.0 is published with the branded installer, portable ZIP and SHA-256 checksums. Both downloaded assets match their published hashes; the downloaded portable app passes 52 core and live update checks.
 - Manual update checking and a release-page link are available in Settings; no automatic updating. A branded per-user installer passes isolated installation, upgrade and uninstall checks.
