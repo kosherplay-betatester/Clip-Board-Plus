@@ -1,4 +1,4 @@
-param([string]$Version = '1.1.0', [string]$Compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", [switch]$InstallerTest)
+param([string]$Version = '1.1.1', [string]$Compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", [switch]$InstallerTest)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $releaseRoot = Join-Path $projectRoot "artifacts\releases\v$Version"

@@ -4,6 +4,7 @@ Clipboard Plus is distributed under Apache License 2.0. The self-contained Windo
 
 - .NET runtime, Windows Desktop/WPF and Windows Forms: MIT, https://github.com/dotnet/runtime/blob/main/LICENSE.TXT and https://github.com/dotnet/wpf/blob/main/LICENSE.TXT
 - Microsoft.Data.Sqlite and Microsoft.Data.Sqlite.Core: MIT, https://github.com/dotnet/efcore/blob/main/LICENSE.txt
+- Html Agility Pack 1.13.0: MIT, https://github.com/zzzprojects/html-agility-pack/blob/master/LICENSE. Used only for local, inert text extraction; no HTML execution or network fetching. License included in `licenses/HTML-AGILITY-PACK-LICENSE.txt`.
 - SQLitePCLRaw components: Apache License 2.0, https://github.com/ericsink/SQLitePCL.raw/blob/master/LICENSE.TXT
 - SQLite: public domain, https://sqlite.org/copyright.html
 - Inno Setup installer engine: Inno Setup License; the installed compiler's license text is included in `licenses/INNO-SETUP-LICENSE.txt`. Inno Setup is a build-time tool, not a running app dependency.

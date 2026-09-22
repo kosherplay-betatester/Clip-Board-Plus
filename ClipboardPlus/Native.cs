@@ -94,6 +94,7 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern bool AddClipboardFormatListener(IntPtr hwnd);
     [DllImport("user32.dll")] internal static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
     [DllImport("user32.dll")] internal static extern uint GetClipboardSequenceNumber();
+    [DllImport("user32.dll")] internal static extern uint GetDoubleClickTime();
     [DllImport("user32.dll")] internal static extern IntPtr GetClipboardOwner();
     [DllImport("user32.dll")] internal static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(IntPtr hwnd);
@@ -115,7 +116,10 @@ internal static class Native
     internal static bool SendPaste()
     {
         var inputs = new[] { Key(0x11), Key(0x56), Key(0x56, 2), Key(0x11, 2) };
-        return SendInput(4, inputs, Marshal.SizeOf<INPUT>()) == 4;
+        if (SendInput(4, inputs, Marshal.SizeOf<INPUT>()) == 4) return true;
+        // A partial injection must not leave our synthetic Ctrl key held down.
+        SendInput(2, [Key(0x56, 2), Key(0x11, 2)], Marshal.SizeOf<INPUT>());
+        return false;
     }
     // An otherwise unused key prevents the shell interpreting a consumed Win+V as a bare Win press.
     internal static void MaskWindowsMenu() => SendInput(2, [Key(0xE8), Key(0xE8, 2)], Marshal.SizeOf<INPUT>());

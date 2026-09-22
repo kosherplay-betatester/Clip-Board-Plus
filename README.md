@@ -12,7 +12,7 @@
 | --- | --- |
 | Writing emails or answering customers | Pin reusable replies as named snippets and find them by name. |
 | Researching across tabs | Keep copied quotes and links together, search your history, and combine selected text into notes. |
-| Filling several fields | Queue copied items, then paste the next item with each Enter. |
+| Filling several fields | Queue copied items, then use the explicit **Paste next queued** button. |
 | Moving between apps | Paste rich content normally, or use Ctrl+Enter for clean plain text. |
 | Working with screenshots | Click the exact image to enlarge, zoom, pan, or view full screen; extract text with on-device OCR. |
 | Checking an audio or video file | Preview from its original source with playback controls, seeking, and 10-second skips. |
@@ -23,7 +23,9 @@
 
 ## Feature highlights
 
-- **Accurate repeat pasting:** double-click acts on the clicked item, keeps its destination snapshot, and checks focus and clipboard changes before sending paste.
+- **Readable rich-text history:** HTML/RTF-only copies gain searchable text previews and plain-text paste. Existing blank previews repair locally in small batches, preserving the original rich content.
+- **Stable choices:** incoming copies show a **New clips** button instead of moving items underneath your pointer. Reopening history or refreshing shows the latest captures.
+- **Guarded repeat pasting:** double-click acts on the clicked item, keeps its destination snapshot, and checks focus and clipboard changes before sending paste.
 - **Copy one or many:** each row has a copy icon; select several clips and use **Copy (count)** beside Recent clips, or Ctrl+C while the list is focused. Combine text, file references and image attachments in one clipboard operation.
 - **Captions when you need them:** Actions → Copy selected text only copies the text from a mixed selection separately. Messaging apps decide whether to accept text, attachments, or both; the app never sends messages for you.
 - **Record shortcuts:** click a button and press one key or a combination of up to three keys. Supports F12, ScrLk, Ctrl+D, Ctrl+Shift+V, and Win+V.
@@ -44,9 +46,9 @@ A native Windows clipboard history app built with .NET 10, WPF, Windows clipboar
 
 [Browse every release and its notes](https://github.com/kosherplay-betatester/Clip-Board-Plus/releases). Requires Windows 10 version 2004 or later / Windows 11, x64.
 
-Download **ClipboardPlus-Setup-1.1.0-win-x64.exe** from GitHub Releases and follow the setup wizard. It installs for your Windows account without administrator privileges and offers a desktop shortcut, optional startup at sign-in, and launch on completion. Updates reuse the same installation; your separate clipboard history is preserved. Uninstall through Windows Apps.
+Download **ClipboardPlus-Setup-1.1.1-win-x64.exe** from GitHub Releases and follow the setup wizard. It installs for your Windows account without administrator privileges and offers a desktop shortcut, optional startup at sign-in, and launch on completion. Updates reuse the same installation; your separate clipboard history is preserved. Uninstall through Windows Apps.
 
-The corrected **1.1 build 2** replaces the original 1.1 download. If you installed the earlier 1.1 release, download the installer again and reinstall; Settings shows the build number. Setup asks before closing a running app and keeps it running if you decline. Silent setup will not close a running app automatically.
+**1.1.1 is a reliability update.** It repairs existing blank text previews, recovers text from HTML/RTF-only copies, keeps rows stable while you choose a clip, and separates queued paste from normal Paste/Enter. Use Settings → Check for updates or download the new installer. Setup asks before closing a running app and keeps it running if you decline. Silent setup will not close a running app automatically.
 
 Prefer portable? Extract **ClipboardPlus-win-x64.zip** into a permanent folder and run **ClipboardPlus.exe**. Both downloads include .NET and work offline after download.
 
@@ -67,7 +69,7 @@ Everything stays local unless you explicitly open an online source or check GitH
 - Select a clip and press **Enter** to paste. **Ctrl+Enter** pastes plain text. **Copy** places an item on the clipboard without switching apps.
 - **Ctrl+F** focuses search, **Down** moves from search into history, **Space** previews the selected item, and **Escape** hides the panel.
 - Click an image thumbnail or choose **Preview** to zoom, pan, enter full screen, or extract text on-device. **F11** toggles preview full screen.
-- Use **Ctrl/Shift+click** to select multiple clips. Under **Actions**, queue them in list order or combine their text into lines. Each subsequent Enter pastes the next queued clip.
+- Use **Ctrl/Shift+click** to select multiple clips. Under **Actions**, queue them in list order or combine their text into lines. Use **Paste next queued** to consume the queue. Enter always pastes the selected clip.
 - Pin items or create named, pinned snippets. Use Actions to trim text, change case, or copy file paths.
 - Filters cover text, images, links, files/folders, pins, and dates. History is paged in groups of 80 and uses UI virtualization.
 

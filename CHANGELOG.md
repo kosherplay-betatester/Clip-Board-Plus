@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.1 — 2026-09-22
+
+- Normal Paste and Enter use the selected clip. The queue has its own **Paste next queued** button and no longer silently overrides selection.
+- Incoming captures no longer reorder visible rows. A **New clips** button refreshes them; reopening the panel also refreshes. Query results cannot replace a row during a double-click, and stale search results are discarded.
+- Clipboard writes carry unique receipts, are checked before automatic paste, and remain serialized through input delivery. Focus changes cancel automatic delivery and leave the requested clip ready for manual paste, with a tray notice when needed.
+- Database IDs are never reused after deletion. Existing databases migrate transactionally while preserving payloads, pins, and indexes.
+- HTML/RTF-only captures gain readable, searchable text. Existing blank previews repair in bounded background batches; original rich data remains intact. Whitespace-only clips get a clear label.
+- A slower earlier image preview cannot replace a more recently requested source. Partial keyboard injection releases synthetic modifier keys.
+- Added regression tests for legacy migration, text recovery, deletion identity, competing writers, external clipboard replacement, rapid Unicode captures, stale queries, and selection/queue routing. See `docs/VERIFICATION-1.1.1.md` for measured results and remaining compatibility checks.
+
+
 ## 1.1.0
 
 ### Corrected release — build 2

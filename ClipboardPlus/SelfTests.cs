@@ -15,6 +15,7 @@ internal static class SelfTests
         void Check(bool result, string name) { if (!result) throw new InvalidOperationException("FAILED: " + name); passed++; report.Add(new { test = name, result = "passed" }); }
         try
         {
+            await ReliabilityTests.RunAsync(root, Check);
             var config = new AppSettings { MaxItems = 100, CacheBudgetMb = 1 };
             using (var store = new HistoryStore(root, config))
             {
@@ -171,9 +172,10 @@ internal static class SelfTests
                     try
                     {
                         target.Show();
-                        await clicked.Task.WaitAsync(TimeSpan.FromMinutes(2));
+                        if (!args.Contains("--unattended-input")) await clicked.Task.WaitAsync(TimeSpan.FromMinutes(2));
+                        else { target.Activate(); destination.Focus(); await Task.Delay(300); }
                         var main = new MainWindow(pasteStore, new(), true); main.Show();
-                        Check(await main.VerifyPasteAsync(target, destination, expected), "Native paste repeats with three different double-clicked rows, stale selection and nonempty queue");
+                        Check(await main.VerifyPasteAsync(target, destination, expected), "Twenty native pastes alternate clicked rows and normal Paste while stale selection and queue never override the requested item");
                     }
                     finally { target.Close(); }
                 }
@@ -247,6 +249,31 @@ internal static class SelfTests
                 uint sequence = await service.PutAsync(new() { Text = $"Fresh replay {i}" });
                 check(System.Windows.Clipboard.GetText() == $"Fresh replay {i}" && Native.GetClipboardSequenceNumber() == sequence, $"Clipboard write {i + 1} completes with fresh content before paste");
             }
+            Task<uint>? competing = null;
+            await service.PublishForPasteAsync(new() { Text = "Intended delivery" }, false, async receipt =>
+            {
+                check(await service.IsCurrentAsync(receipt), "Paste receipt verifies the exact per-write marker on the real clipboard");
+                competing = service.PutAsync(new() { Text = "Following copy" });
+                await Task.Delay(80);
+                check(!competing.IsCompleted && System.Windows.Clipboard.GetText() == "Intended delivery", "Concurrent app copy cannot replace content while a paste delivery is in progress");
+            });
+            await competing!;
+            check(System.Windows.Clipboard.GetText() == "Following copy", "Deferred clipboard writer completes after paste delivery releases the gate");
+            service.Paused = true;
+            await service.PublishForPasteAsync(new() { Text = "Original receipt" }, false, async receipt =>
+            {
+                System.Windows.Clipboard.SetText("External replacement");
+                check(!await service.IsCurrentAsync(receipt), "External clipboard replacement invalidates the paste receipt instead of pasting foreign content");
+            });
+            service.Paused = false;
+            for (int i = 0; i < 20; i++)
+            {
+                string expected = $"Sequential capture {i} — שלום 你好";
+                System.Windows.Clipboard.SetText(expected);
+                for (int wait = 0; wait < 80 && received.IsEmpty; wait++) await Task.Delay(10);
+                if (!received.TryDequeue(out var actual) || actual.Text != expected) throw new InvalidOperationException($"Sequential capture mismatch at {i}");
+            }
+            check(true, "Twenty real Unicode copy events retain the correct payload and order");
             var privateData = new System.Windows.DataObject(); privateData.SetText("Do not retain this synthetic fixture"); privateData.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream([1]));
             System.Windows.Clipboard.SetDataObject(privateData, true); await Task.Delay(150);
             check(received.IsEmpty, "Real capture respects history exclusion format");
@@ -258,6 +285,8 @@ internal static class SelfTests
             service.Paused = false; service.Configure(new() { ExcludedApps = "ClipboardPlus" }); System.Windows.Clipboard.SetText("Excluded process synthetic fixture"); await Task.Delay(150);
             check(received.IsEmpty, "Excluded source process is not captured");
             check(issues.IsEmpty, "Live clipboard integration completes without service errors");
+            using var routingStore = new HistoryStore(Path.Combine(Path.GetTempPath(), "ClipboardPlus-Routing-" + Guid.NewGuid().ToString("N")), new());
+            check(await MainWindow.VerifyClipboardRoutingAsync(routingStore), "Twenty-four selected/clicked Paste requests publish the exact requested text despite a stale queue; stale search results are rejected");
         }
         finally
         {

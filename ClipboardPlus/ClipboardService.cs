@@ -7,6 +7,8 @@ using System.Windows.Threading;
 
 namespace ClipboardPlus;
 
+internal readonly record struct ClipboardReceipt(uint Sequence, byte[] Token);
+
 public sealed class ClipboardService : IDisposable
 {
     private readonly Thread thread;
@@ -121,18 +123,19 @@ public sealed class ClipboardService : IDisposable
             if (stream.Length > limit * 0.7) throw new InvalidOperationException("Image exceeds the item size limit.");
             return new() { Kind = ClipKind.Image, Image = stream.ToArray(), Source = owner, Name = $"Image · {bitmap.PixelWidth} × {bitmap.PixelHeight}" };
         }
-        string? text = data.GetData(DataFormats.UnicodeText) as string ?? data.GetData(DataFormats.Text) as string;
-        string? html = data.GetData(DataFormats.Html) as string, rtf = data.GetData(DataFormats.Rtf) as string;
+        string? text = ClipText.Read(data.GetData(DataFormats.UnicodeText), true);
+        if (string.IsNullOrEmpty(text)) text = ClipText.Read(data.GetData(DataFormats.Text)) ?? text;
+        string? html = ClipText.Read(data.GetData(DataFormats.Html)), rtf = ClipText.Read(data.GetData(DataFormats.Rtf));
         if (text is null && html is null && rtf is null) return null;
         text ??= "";
         if ((long)(text.Length + (html?.Length ?? 0) + (rtf?.Length ?? 0)) * 2 > limit) throw new InvalidOperationException("Text exceeds the item size limit.");
         var isLink = Uri.TryCreate(text.Trim(), UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http";
-        return new() { Kind = isLink ? ClipKind.Link : ClipKind.Text, Text = text, Html = html, Rtf = rtf, Source = owner };
+        return ClipText.Normalize(new() { Kind = isLink ? ClipKind.Link : ClipKind.Text, Text = text, Html = html, Rtf = rtf, Source = owner });
     }
     internal static System.Windows.DataObject CreateData(ClipPayload payload, bool plain)
     {
         var data = new System.Windows.DataObject();
-        data.SetData("ClipboardPlus.Internal", new MemoryStream([1]), false);
+        data.SetData("ClipboardPlus.Internal", new MemoryStream(Guid.NewGuid().ToByteArray()), false);
         if (payload.Kind == ClipKind.Files && !plain)
         {
             var missing = payload.Paths.Where(p => !File.Exists(p) && !Directory.Exists(p)).ToArray();
@@ -162,7 +165,7 @@ public sealed class ClipboardService : IDisposable
         if (payloads.Count == 0) throw new ArgumentException("Select at least one item.");
         if (payloads.Count == 1) return CreateData(payloads[0], false);
         var data = new System.Windows.DataObject();
-        data.SetData("ClipboardPlus.Internal", new MemoryStream([1]), false);
+        data.SetData("ClipboardPlus.Internal", new MemoryStream(Guid.NewGuid().ToByteArray()), false);
         var paths = payloads.SelectMany(p => p.Kind == ClipKind.Files ? p.Paths : []).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (paths.Any(p => !File.Exists(p) && !Directory.Exists(p))) throw new FileNotFoundException("A selected source file or folder is unavailable. No items were copied.");
         var text = string.Join(Environment.NewLine, payloads.Where(p => p.Kind is ClipKind.Text or ClipKind.Link).Select(p => p.Text));
@@ -199,19 +202,43 @@ public sealed class ClipboardService : IDisposable
     public Task<uint> PutAsync(ClipPayload payload, bool plain = false) => PutDataAsync(() => CreateData(payload, plain));
     public Task<uint> PutManyAsync(IReadOnlyList<ClipPayload> payloads) => PutDataAsync(() => CreateManyData(payloads,
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipboardPlus", "CopyExports")));
-    private async Task<uint> PutDataAsync(Func<System.Windows.DataObject> create)
+    internal Task PublishForPasteAsync(ClipPayload payload, bool plain, Func<ClipboardReceipt, Task> deliver)
+        => PutDataAsync(() => CreateData(payload, plain), deliver);
+    internal async Task<bool> IsCurrentAsync(ClipboardReceipt receipt)
+    {
+        await Ready;
+        return await dispatcher.InvokeAsync(() =>
+        {
+            try
+            {
+                if (receipt.Sequence != Native.GetClipboardSequenceNumber()) return false;
+                var value = System.Windows.Clipboard.GetData("ClipboardPlus.Internal");
+                var token = value switch { MemoryStream m => m.ToArray(), byte[] b => b, _ => [] };
+                return token.AsSpan().SequenceEqual(receipt.Token) && receipt.Sequence == Native.GetClipboardSequenceNumber();
+            }
+            catch (ExternalException) { return false; }
+        });
+    }
+    private async Task<uint> PutDataAsync(Func<System.Windows.DataObject> create, Func<ClipboardReceipt, Task>? deliver = null)
     {
         await Ready;
         await writes.WaitAsync();
-        try { return await dispatcher.InvokeAsync(async () =>
+        try
+        {
+        var receipt = await dispatcher.InvokeAsync(async () =>
         {
             var data = create();
+            var token = ((MemoryStream)data.GetData("ClipboardPlus.Internal")!).ToArray();
             for (int attempt = 0; ; attempt++)
             {
-                try { System.Windows.Clipboard.SetDataObject(data, true); ignoredSequence = Native.GetClipboardSequenceNumber(); return ignoredSequence; }
+                try { System.Windows.Clipboard.SetDataObject(data, true); ignoredSequence = Native.GetClipboardSequenceNumber(); return new ClipboardReceipt(ignoredSequence, token); }
                 catch (ExternalException) when (attempt < 5) { await Task.Delay(25 * (attempt + 1)); }
             }
-        }).Task.Unwrap(); }
+        }).Task.Unwrap();
+        // Keep every application writer serialized until the paste input has been delivered.
+        if (deliver is not null) await deliver(receipt);
+        return receipt.Sequence;
+        }
         finally { writes.Release(); }
     }
     public void Dispose()

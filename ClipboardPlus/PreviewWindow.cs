@@ -23,6 +23,7 @@ public sealed class PreviewWindow : Window
     private byte[]? imageBytes;
     private string? currentSource;
     private bool closed, fullscreen;
+    private int sourceVersion;
     private WindowState previousState;
     private const long MaxPreviewBytes = 32 * 1048576;
     private readonly TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -75,6 +76,7 @@ public sealed class PreviewWindow : Window
     }
     private void ShowFiles()
     {
+        sourceVersion++;
         body.Children.Clear();
         var dock = new DockPanel(); body.Children.Add(dock);
         var note = new TextBlock { Text = "References only — original files stay in their current locations.", TextWrapping = TextWrapping.Wrap, Margin = new(0, 0, 0, 14) };
@@ -101,10 +103,11 @@ public sealed class PreviewWindow : Window
     }
     private async Task ShowSourceAsync(string source)
     {
+        int version = ++sourceVersion;
         ReleasePlayer(); body.Children.Clear(); currentSource = source;
         bool remote = Uri.TryCreate(source, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http";
         if (!remote && !await Task.Run(() => File.Exists(source) || Directory.Exists(source))) throw new FileNotFoundException("The original source was moved, deleted, or is offline.");
-        if (closed) return;
+        if (closed || version != sourceVersion) return;
         var extension = Path.GetExtension(remote ? uri!.AbsolutePath : source).ToLowerInvariant();
         var dock = new DockPanel(); body.Children.Add(dock);
         var buttons = new WrapPanel(); DockPanel.SetDock(buttons, Dock.Bottom); dock.Children.Add(buttons);
@@ -117,9 +120,9 @@ public sealed class PreviewWindow : Window
             if (remote)
             {
                 dock.Children.Add(new TextBlock { Text = "Load this image from its original address when you’re ready.", TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center });
-                buttons.Children.Add(Button("Load image", async () => { imageBytes = await ReadRemoteImage(source); if (!closed) ShowImage(imageBytes); }));
+                buttons.Children.Add(Button("Load image", async () => { var bytes = await ReadRemoteImage(source); if (!closed && version == sourceVersion) { imageBytes = bytes; ShowImage(bytes); } }));
             }
-            else { imageBytes = await ReadLocalImage(source); if (!closed) ShowImage(imageBytes); }
+            else { var bytes = await ReadLocalImage(source); if (!closed && version == sourceVersion) { imageBytes = bytes; ShowImage(bytes); } }
         }
         else if (new[] { ".mp4", ".m4v", ".wmv", ".avi", ".mov", ".mp3", ".wav", ".wma", ".m4a", ".aac", ".flac", ".webm", ".mkv", ".ogg" }.Contains(extension))
         {

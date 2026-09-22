@@ -1,4 +1,4 @@
-param([string]$Version = '1.1.0')
+param([string]$Version = '1.1.1')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $releaseRoot = Join-Path $projectRoot "artifacts\releases\v$Version"

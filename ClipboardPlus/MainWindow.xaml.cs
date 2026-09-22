@@ -28,6 +28,10 @@ public partial class MainWindow : Window
     private bool exiting, initialized;
     private PasteDestination pasteDestination;
     private bool clipboardAction;
+    private bool queryPending;
+    private long lastRowPress;
+    private long? pressedRowId;
+    private PasteDestination? pendingPanel;
     private readonly TaskCompletionSource loaded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? initialization;
     public MainWindow(HistoryStore store, AppSettings settings, bool demo)
@@ -36,7 +40,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         ClipList.ItemsSource = rows;
         searchTimer.Tick += async (_, _) => { searchTimer.Stop(); await Safe(RefreshAsync); };
-        maintenance.Tick += async (_, _) => await Safe(async () => { await store.MaintainAsync(); if (IsVisible) await RefreshAsync(); });
+        maintenance.Tick += async (_, _) => await Safe(async () => { await store.MaintainAsync(); MarkHistoryChanged(); });
         Loaded += async (_, _) => { await InitializeAsync(); if (IsVisible) SearchBox.Focus(); };
         Closing += (_, e) => { if (!exiting) { e.Cancel = true; Hide(); } };
     }
@@ -45,7 +49,7 @@ public partial class MainWindow : Window
     {
         initialized = true;
         var handle = new WindowInteropHelper(this).EnsureHandle();
-        clipboard = new(settings, async payload => { await store.AddAsync(payload); _ = Dispatcher.BeginInvoke(() => { if (IsVisible) ScheduleRefresh(); }); }, SetStatus);
+        clipboard = new(settings, async payload => { await store.AddAsync(payload); _ = Dispatcher.BeginInvoke(MarkHistoryChanged); }, SetStatus);
         clipboard.Paused = demo;
         await clipboard.Ready;
         hotkeys = new(handle, ShowPanel);
@@ -55,6 +59,7 @@ public partial class MainWindow : Window
         if (demo) SetStatus("Demo workspace · capture paused · sample clips only");
         else if (settings.WindowsHistoryManaged) { try { SetStatus(WindowsHistorySettings.Apply(settings)); } catch (Exception e) { SetStatus("Could not apply Windows history preference: " + e.Message); } }
         loaded.TrySetResult();
+        _ = Safe(async () => { while (!exiting && await store.RepairTextBatchAsync()) await Task.Delay(50); if (!exiting) MarkHistoryChanged(); });
     }
     private void CreateTray()
     {
@@ -86,7 +91,7 @@ public partial class MainWindow : Window
         => ShowPanel(Native.CaptureDestination(target));
     public void ShowPanel(PasteDestination target)
     {
-        if (clipboardAction) return;
+        if (clipboardAction) { pendingPanel = target; return; }
         if (target.Window != new WindowInteropHelper(this).Handle && !OwnedWindows.Cast<Window>().Any(w => new WindowInteropHelper(w).Handle == target.Window)) pasteDestination = target;
         if (IsVisible && target.Window == new WindowInteropHelper(this).Handle) { Hide(); return; }
         Show(); WindowState = WindowState.Normal; Activate(); SearchBox.Focus(); SearchBox.SelectAll(); ScheduleRefresh();
@@ -97,23 +102,54 @@ public partial class MainWindow : Window
         StatusLabel.Text = text;
         StatusLabel.ToolTip = text;
     }
+    private void PasteNotice(string text)
+    {
+        SetStatus(text);
+        if (!IsVisible && !demo) tray.ShowBalloonTip(3500, "Clipboard Plus", text, System.Windows.Forms.ToolTipIcon.Info);
+    }
+    private void FinishClipboardAction()
+    {
+        clipboardAction = false;
+        if (pendingPanel is { } nextPanel) { pendingPanel = null; ShowPanel(nextPanel); }
+    }
     private async Task Safe(Func<Task> action)
     {
         try { await action(); } catch (Exception e) { SetStatus(e.Message); }
     }
-    private void ScheduleRefresh() { searchTimer.Stop(); searchTimer.Start(); }
+    private void MarkHistoryChanged() { if (!exiting) RefreshButton.Visibility = Visibility.Visible; }
+    private async void Refresh_Click(object sender, RoutedEventArgs e) => await Safe(RefreshAsync);
+    private void ScheduleRefresh() { ++refreshVersion; queryPending = true; searchTimer.Stop(); searchTimer.Start(); }
     private DateTimeOffset? Since => DateFilter.SelectedIndex switch { 1 => new DateTimeOffset(DateTime.Today), 2 => DateTimeOffset.Now.AddDays(-7), 3 => DateTimeOffset.Now.AddDays(-30), _ => null };
     private async Task RefreshAsync()
     {
         long version = ++refreshVersion;
+        queryPending = true;
+        searchTimer.Stop();
+        try
+        {
+        RefreshButton.Visibility = Visibility.Collapsed;
         var results = await store.QueryAsync(new(SearchBox.Text, filter, offset, 80, Since));
+        // Never recycle a row between the two presses of a double-click.
+        while (version == refreshVersion && IsVisible && (Mouse.LeftButton == MouseButtonState.Pressed || Environment.TickCount64 - lastRowPress < Native.GetDoubleClickTime())) await Task.Delay(25);
         if (version != refreshVersion) return;
         // Selection may have changed while the database query was in flight.
         var selected = ClipList.SelectedItems.Cast<ClipRow>().Select(r => r.Id).ToHashSet();
-        rows.Clear(); foreach (var row in results) rows.Add(row);
-        foreach (var row in rows.Where(r => selected.Contains(r.Id))) ClipList.SelectedItems.Add(row);
+        var wanted = results.Select(r => r.Id).ToHashSet();
+        for (int i = rows.Count - 1; i >= 0; i--) if (!wanted.Contains(rows[i].Id)) rows.RemoveAt(i);
+        for (int i = 0; i < results.Count; i++)
+        {
+            var row = results[i];
+            var existing = rows.FirstOrDefault(r => r.Id == row.Id);
+            if (existing is null) rows.Insert(i, row);
+            else
+            {
+                int current = rows.IndexOf(existing); if (current != i) rows.Move(current, i);
+                if (existing.Updated != row.Updated || existing.Pinned != row.Pinned || existing.Title != row.Title || existing.Preview != row.Preview || existing.Summary.MediaSource != row.Summary.MediaSource) rows[i] = row;
+            }
+        }
+        foreach (var row in rows.Where(r => selected.Contains(r.Id))) if (!ClipList.SelectedItems.Contains(row)) ClipList.SelectedItems.Add(row);
         if (ClipList.SelectedItems.Count == 0) ClipList.SelectedItem = rows.FirstOrDefault();
-        PasteButton.IsEnabled = ClipList.SelectedItem is not null || pasteQueue.Count > 0;
+        PasteButton.IsEnabled = ClipList.SelectedItem is not null;
         EmptyPanel.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         EmptyTitle.Text = SearchBox.Text.Length > 0 ? "No matching clips" : "Your next idea starts here";
         EmptyText.Text = SearchBox.Text.Length > 0 ? "Try another word, a filename, or an app name." : "Copy text, an image, or files. We’ll keep them within reach.";
@@ -123,6 +159,8 @@ public partial class MainWindow : Window
         var stats = await store.StatsAsync();
         if (version != refreshVersion) return;
         StorageLabel.Text = $"{stats.Count:N0} clips  ·  {stats.DiskBytes.SizeLabel()} on disk";
+        }
+        finally { if (version == refreshVersion) queryPending = false; }
     }
     private void Search_Changed(object sender, TextChangedEventArgs e) { if (SearchHint is not null) SearchHint.Visibility = SearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; offset = 0; if (initialized) ScheduleRefresh(); }
     private void Date_Changed(object sender, SelectionChangedEventArgs e) { offset = 0; if (initialized) ScheduleRefresh(); }
@@ -136,7 +174,7 @@ public partial class MainWindow : Window
     private async void Next_Click(object sender, RoutedEventArgs e) { offset += 80; await Safe(RefreshAsync); }
     private void Selection_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (PasteButton is not null) PasteButton.IsEnabled = ClipList.SelectedItem is not null || pasteQueue.Count > 0;
+        if (PasteButton is not null) PasteButton.IsEnabled = ClipList.SelectedItem is not null;
         if (CopySelectedButton is not null) { CopySelectedButton.IsEnabled = ClipList.SelectedItems.Count > 0; CopySelectedButton.Content = $"⧉  Copy ({ClipList.SelectedItems.Count})"; }
     }
     private async void Pin_Click(object sender, RoutedEventArgs e)
@@ -151,47 +189,62 @@ public partial class MainWindow : Window
         if (payload is null) { SetStatus("This clip has expired or was removed."); await RefreshAsync(); }
         return payload;
     }
-    private async Task PasteAsync(bool plain = false, bool copyOnly = false, ClipPayload? supplied = null, long? clickedId = null)
+    private async Task PasteAsync(bool plain = false, bool copyOnly = false, ClipPayload? supplied = null, long? clickedId = null, bool fromQueue = false)
     {
         if (clipboardAction) return;
+        if (queryPending && supplied is null) { SetStatus("Updating the list. Choose your clip when the results are ready."); return; }
         clipboardAction = true;
         var destination = pasteDestination;
         long? selectedId = clickedId ?? (ClipList.SelectedItem as ClipRow)?.Id;
         try
         {
-        long? queueId = !copyOnly && supplied is null && clickedId is null && pasteQueue.TryPeek(out long next) ? next : null;
+        long? queueId = fromQueue && pasteQueue.TryPeek(out long next) ? next : null;
+        if (fromQueue && queueId is null) return;
         var payload = supplied ?? ((queueId ?? selectedId) is { } id ? await store.GetAsync(id) : null);
         if (payload is null)
         {
             if (queueId is not null) { pasteQueue.Dequeue(); UpdateQueue(); SetStatus("A queued clip was removed. Continue with the next item."); }
             return;
         }
-        uint sequence = await clipboard.PutAsync(payload, plain);
-        if (copyOnly) { SetStatus("Copied. Ready to paste anywhere."); return; }
+        if (copyOnly) { await clipboard.PutAsync(payload, plain); SetStatus("Copied. Ready to paste anywhere."); return; }
         var pasteTarget = destination.Window;
         if (!Native.ValidDestination(destination) || pasteTarget == new WindowInteropHelper(this).Handle)
         {
+            await clipboard.PutAsync(payload, plain);
             SetStatus("Copied. Open Clipboard Plus from your destination app using the shortcut to paste directly."); return;
+        }
+        if (!Native.IsOurWindow(Native.GetForegroundWindow()))
+        {
+            await clipboard.PutAsync(payload, plain);
+            PasteNotice("Copied. Focus changed while preparing the clip; use Ctrl+V where you want to paste."); return;
         }
         Hide();
         if (Native.GetForegroundWindow() != pasteTarget) Native.SetForegroundWindow(pasteTarget);
         for (int i = 0; i < 10 && Native.GetForegroundWindow() != pasteTarget; i++) await Task.Delay(10);
-        if (Native.GetForegroundWindow() != pasteTarget) { Show(); Activate(); SetStatus("Copied. Windows prevented focus switching; paste manually with Ctrl+V."); return; }
+        if (Native.GetForegroundWindow() != pasteTarget) { await clipboard.PutAsync(payload, plain); PasteNotice("Copied. Windows prevented focus switching; paste manually with Ctrl+V."); return; }
         // Never synthesize Ctrl+V while the user still holds the shortcut's modifier keys.
         for (int i = 0; i < 40 && new[] { 0x01, 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(k => Native.GetAsyncKeyState(k) < 0); i++) await Task.Delay(25);
-        await Task.Delay(45);
-        if (Native.GetClipboardSequenceNumber() != sequence) { Show(); Activate(); SetStatus("The clipboard changed before paste. Select your clip again; nothing was pasted."); return; }
-        if (!Native.RestoreDestinationFocus(destination) || Native.GetForegroundWindow() != pasteTarget || new[] { 0x01, 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(k => Native.GetAsyncKeyState(k) < 0) || !Native.SendPaste())
-        { Show(); Activate(); SetStatus("Copied, but automatic paste was blocked. Use Ctrl+V in the destination app."); return; }
-        if (queueId is not null) { pasteQueue.Dequeue(); UpdateQueue(); }
-        SetStatus("Pasted to the previous app.");
-        // Give the recipient time to consume Ctrl+V before another action can replace the clipboard.
-        await Task.Delay(150);
-        if (!settings.HideAfterPaste) { Show(); Activate(); }
+        await clipboard.PublishForPasteAsync(payload, plain, async receipt =>
+        {
+            if (!await clipboard.IsCurrentAsync(receipt)) { PasteNotice("Another app changed the clipboard. Paste was cancelled; choose the clip again."); return; }
+            if (!Native.RestoreDestinationFocus(destination) || Native.GetForegroundWindow() != pasteTarget || new[] { 0x01, 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(k => Native.GetAsyncKeyState(k) < 0) || Native.GetClipboardSequenceNumber() != receipt.Sequence || !Native.SendPaste())
+            { PasteNotice("Copied, but automatic paste was blocked. Use Ctrl+V in the destination app."); return; }
+            if (queueId is not null) { pasteQueue.Dequeue(); UpdateQueue(); }
+            SetStatus("Paste sent to the previous app.");
+            // No writer in this app can replace the clipboard during input delivery.
+            await Task.Delay(300);
+            if (!settings.HideAfterPaste && pendingPanel is null && Native.GetForegroundWindow() == pasteTarget) { Show(); Activate(); }
+        });
         }
-        finally { clipboardAction = false; }
+        finally { FinishClipboardAction(); }
     }
-    private void UpdateQueue() => QueueLabel.Text = pasteQueue.Count == 0 ? "Enter to paste  ·  Ctrl+Enter for plain text  ·  Esc to hide" : $"Paste queue: {pasteQueue.Count} remaining · Enter pastes the next clip";
+    private void UpdateQueue()
+    {
+        QueueLabel.Text = pasteQueue.Count == 0 ? "Enter to paste  ·  Ctrl+Enter for plain text  ·  Esc to hide" : $"Queue: {pasteQueue.Count} remaining · Enter still pastes your selected clip";
+        PasteQueueButton.Visibility = pasteQueue.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        PasteQueueButton.Content = $"Paste next queued ({pasteQueue.Count})";
+    }
+    private async void PasteQueue_Click(object sender, RoutedEventArgs e) => await Safe(() => PasteAsync(fromQueue: true));
     private async void Paste_Click(object sender, RoutedEventArgs e) => await Safe(() => PasteAsync());
     private async void Copy_Click(object sender, RoutedEventArgs e) => await Safe(CopySelectionAsync);
     private async void RowCopy_Click(object sender, RoutedEventArgs e)
@@ -201,6 +254,7 @@ public partial class MainWindow : Window
     }
     private async Task CopySelectionAsync()
     {
+        if (queryPending) { SetStatus("Wait for the search results before copying."); return; }
         var ids = rows.Where(r => ClipList.SelectedItems.Contains(r)).Select(r => r.Id).ToArray();
         if (ids.Length == 1) { await PasteAsync(copyOnly: true, clickedId: ids[0]); return; }
         if (ids.Length == 0 || clipboardAction) return;
@@ -218,17 +272,29 @@ public partial class MainWindow : Window
             await clipboard.PutManyAsync(payloads);
             SetStatus($"Copied {ids.Length} items. The receiving app chooses text or attachments; paste captions separately if needed.");
         }
-        finally { clipboardAction = false; }
+        finally { FinishClipboardAction(); }
+    }
+    private static ClipRow? HitRow(DependencyObject? d)
+    {
+        while (d is not null)
+        {
+            if (d is System.Windows.Controls.Primitives.ButtonBase or Slider or MediaControls) return null;
+            if (d is ListBoxItem item) return item.DataContext as ClipRow;
+            d = d is Visual ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
+        }
+        return null;
+    }
+    private void Clip_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 1) pressedRowId = HitRow(e.OriginalSource as DependencyObject)?.Id;
+        lastRowPress = Environment.TickCount64;
     }
     private async void Clip_DoubleClick(object sender, MouseButtonEventArgs e)
     {
-        ClipRow? clicked = null;
-        if (e.OriginalSource is DependencyObject d)
-        {
-            while (d is not null) { if (d is System.Windows.Controls.Primitives.ButtonBase or Slider or MediaControls) return; if (d is ListBoxItem item) { clicked = item.DataContext as ClipRow; break; } d = d is Visual ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d); }
-        }
+        var clicked = HitRow(e.OriginalSource as DependencyObject);
         if (clicked is null) return;
         e.Handled = true;
+        if (pressedRowId is { } pressed && Environment.TickCount64 - lastRowPress <= Native.GetDoubleClickTime() && pressed != clicked.Id) { SetStatus("Selection changed between clicks. Choose the item again."); return; }
         await Safe(() => PasteAsync(clickedId: clicked.Id));
     }
     private async void Preview_Click(object sender, RoutedEventArgs e) => await Safe(async () =>
@@ -383,7 +449,7 @@ public partial class MainWindow : Window
             if (destination.Text != expected) throw new InvalidOperationException($"Paste verification: {StatusLabel.Text}; length={destination.Text.Length}; focus={destination.IsKeyboardFocused}; focusedType={Keyboard.FocusedElement?.GetType().Name}; targetActive={target.IsActive}; clipboardMatches={System.Windows.Clipboard.GetText() == expected}");
             // Repeat against different clicked rows while a previous row and queue remain selected.
             var firstId = rows.Single().Id;
-            for (int round = 0; round < 3; round++)
+            for (int round = 0; round < 20; round++)
             {
                 string nextText = $"Different clicked item {round}";
                 long nextId = await store.AddAsync(new() { Text = nextText });
@@ -395,7 +461,8 @@ public partial class MainWindow : Window
                 var clickedRow = rows.Single(r => r.Id == nextId);
                 ClipList.ScrollIntoView(clickedRow); ClipList.UpdateLayout();
                 var container = (ListBoxItem)ClipList.ItemContainerGenerator.ContainerFromItem(clickedRow);
-                ClipList.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Control.MouseDoubleClickEvent, Source = container });
+                if (round % 2 == 0) ClipList.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = Control.MouseDoubleClickEvent, Source = container });
+                else { ClipList.SelectedItem = clickedRow; await PasteAsync(); }
                 for (int i = 0; i < 80 && (destination.Text != nextText || clipboardAction); i++) await Task.Delay(25);
                 if (destination.Text != nextText || pasteQueue.Count != round + 1) throw new InvalidOperationException($"Repeated double-click round={round}, text={destination.Text}, expected={nextText}, queue={pasteQueue.Count}, busy={clipboardAction}, clicked={container.DataContext}, status={StatusLabel.Text}");
             }
@@ -418,6 +485,33 @@ public partial class MainWindow : Window
         }
         finally { window.Cleanup(); window.Close(); }
     }
+    internal static async Task<bool> VerifyClipboardRoutingAsync(HistoryStore store)
+    {
+        var window = new MainWindow(store, new() { Hotkey = "Ctrl+Alt+F9" }, true);
+        try
+        {
+            await window.InitializeAsync();
+            long oldId = await store.AddAsync(new() { Text = "Old queue fixture" });
+            window.pasteQueue.Enqueue(oldId);
+            for (int i = 0; i < 24; i++)
+            {
+                string expected = $"Requested row {i} — שלום 你好";
+                long id = await store.AddAsync(new() { Text = expected });
+                await window.RefreshAsync();
+                window.ClipList.SelectedItem = window.rows.Single(r => r.Id == (i % 2 == 0 ? oldId : id));
+                // With no valid destination, the full Paste flow must still copy the right item.
+                await window.PasteAsync(clickedId: i % 2 == 0 ? id : null);
+                if (System.Windows.Clipboard.GetText() != expected || window.pasteQueue.Count != 1) return false;
+            }
+            // Search changes invalidate a query immediately, before its debounce fires.
+            var pending = window.RefreshAsync(); window.SearchBox.Text = "not-in-any-fixture";
+            await pending;
+            if (!window.queryPending) return false;
+            await window.RefreshAsync();
+            return window.rows.Count == 0;
+        }
+        finally { window.Cleanup(); window.Close(); }
+    }
     internal static async Task<bool> VerifySelectionRefreshAsync(HistoryStore store)
     {
         var window = new MainWindow(store, new() { Hotkey = "Ctrl+Alt+F9" }, true);
@@ -432,7 +526,12 @@ public partial class MainWindow : Window
             window.ClipList.SelectedItems.Clear();
             window.ClipList.SelectedItem = window.rows.Single(r => r.Id == ids[1]);
             await pendingRefresh;
-            return window.ClipList.SelectedItems.Count == 1 && ((ClipRow)window.ClipList.SelectedItem).Id == ids[1];
+            if (window.ClipList.SelectedItems.Count != 1 || ((ClipRow)window.ClipList.SelectedItem).Id != ids[1]) return false;
+            var before = window.rows.ToArray();
+            await store.AddAsync(new() { Text = "New capture while choosing a row" });
+            window.MarkHistoryChanged();
+            await Task.Delay(200);
+            return before.SequenceEqual(window.rows) && window.RefreshButton.Visibility == Visibility.Visible;
         }
         finally { window.Cleanup(); window.Close(); }
     }

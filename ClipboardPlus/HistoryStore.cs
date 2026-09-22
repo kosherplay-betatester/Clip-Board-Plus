@@ -12,6 +12,8 @@ public sealed class HistoryStore : IDisposable
     private readonly PayloadCache cache;
     private AppSettings settings;
     private int writesSinceCheckpoint;
+    private long repairCursor;
+    private bool disposed;
     public string Root { get; }
     public long CacheBytes => cache.Bytes;
     public HistoryStore(string root, AppSettings settings)
@@ -27,15 +29,39 @@ public sealed class HistoryStore : IDisposable
         Execute("PRAGMA auto_vacuum=INCREMENTAL; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000; PRAGMA cache_size=-2048;");
         Execute("""
             CREATE TABLE IF NOT EXISTS clips (
-                id INTEGER PRIMARY KEY, fingerprint BLOB NOT NULL UNIQUE, kind INTEGER NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT, fingerprint BLOB NOT NULL UNIQUE, kind INTEGER NOT NULL,
                 summary BLOB NOT NULL, payload BLOB NOT NULL, bytes INTEGER NOT NULL,
                 created INTEGER NOT NULL, updated INTEGER NOT NULL, pinned INTEGER NOT NULL DEFAULT 0);
             CREATE INDEX IF NOT EXISTS clips_recent ON clips(pinned DESC, updated DESC, id DESC);
             CREATE INDEX IF NOT EXISTS clips_kind ON clips(kind, updated DESC);
             CREATE TABLE IF NOT EXISTS tokens (token BLOB NOT NULL, clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE, PRIMARY KEY(token, clip_id)) WITHOUT ROWID;
             CREATE INDEX IF NOT EXISTS tokens_clip ON tokens(clip_id);
-            PRAGMA user_version=1;
             """);
+        // A stale row or queue entry must never resolve to a different clip after deletion.
+        using var schema = Command("SELECT sql FROM sqlite_master WHERE name='clips'");
+        if (!(schema.ExecuteScalar() as string)!.Contains("AUTOINCREMENT", StringComparison.OrdinalIgnoreCase))
+        {
+            Execute("PRAGMA foreign_keys=OFF;");
+            try
+            {
+                using var tx = db.BeginTransaction();
+                using var migrate = Command("""
+                    CREATE TABLE clips_v2 (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT, fingerprint BLOB NOT NULL UNIQUE, kind INTEGER NOT NULL,
+                        summary BLOB NOT NULL, payload BLOB NOT NULL, bytes INTEGER NOT NULL,
+                        created INTEGER NOT NULL, updated INTEGER NOT NULL, pinned INTEGER NOT NULL DEFAULT 0);
+                    INSERT INTO clips_v2 SELECT * FROM clips;
+                    DROP TABLE clips;
+                    ALTER TABLE clips_v2 RENAME TO clips;
+                    CREATE INDEX clips_recent ON clips(pinned DESC, updated DESC, id DESC);
+                    CREATE INDEX clips_kind ON clips(kind, updated DESC);
+                    PRAGMA user_version=2;
+                    """);
+                migrate.Transaction = tx; migrate.ExecuteNonQuery(); tx.Commit();
+            }
+            finally { Execute("PRAGMA foreign_keys=ON;"); }
+        }
+        Execute("PRAGMA user_version=2;");
     }
     private static byte[] Protect(byte[] bytes) => ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
     private static byte[] Unprotect(byte[] bytes) => ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser);
@@ -50,12 +76,13 @@ public sealed class HistoryStore : IDisposable
     private async Task<T> Work<T>(Func<T> work)
     {
         await gate.WaitAsync().ConfigureAwait(false);
-        try { return await Task.Run(work).ConfigureAwait(false); }
+        try { ObjectDisposedException.ThrowIf(disposed, this); return await Task.Run(work).ConfigureAwait(false); }
         finally { gate.Release(); }
     }
     public Task<long> AddAsync(ClipPayload payload, bool pin = false) => Work(() => Add(payload, pin));
     private long Add(ClipPayload payload, bool pin)
     {
+        payload = ClipText.Normalize(payload);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(payload);
         if (bytes.Length > settings.MaxItemMb * 1048576L) throw new InvalidOperationException("Clip exceeds the individual item limit. Increase it in Settings if needed.");
         // Source application and a user-assigned label must not prevent content deduplication.
@@ -73,7 +100,7 @@ public sealed class HistoryStore : IDisposable
                 bytes=CASE WHEN $rename=1 THEN excluded.bytes ELSE clips.bytes END
             RETURNING id;
             """, ("$hash", fingerprint), ("$kind", (int)payload.Kind),
-            ("$summary", Protect(JsonSerializer.SerializeToUtf8Bytes(new ClipSummary(payload.Title, payload.Preview, payload.Source, MakeThumbnail(payload.Image), MediaSourceInfo.From(payload), true)))),
+            ("$summary", Protect(JsonSerializer.SerializeToUtf8Bytes(new ClipSummary(payload.Title, payload.Preview, payload.Source, MakeThumbnail(payload.Image), MediaSourceInfo.From(payload), true, 1)))),
             ("$payload", Protect(bytes)), ("$bytes", bytes.LongLength), ("$now", now), ("$pin", pin ? 1 : 0), ("$rename", rename ? 1 : 0));
         cmd.Transaction = tx;
         var id = (long)cmd.ExecuteScalar()!;
@@ -143,6 +170,11 @@ public sealed class HistoryStore : IDisposable
         for (int i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
+            if (row.Kind is ClipKind.Text or ClipKind.Link && row.Summary.TextVersion < 1)
+            {
+                var summary = RepairText(row.Id, row.Summary);
+                rows[i] = row = row with { Summary = summary };
+            }
             if (row.Kind is not (ClipKind.Files or ClipKind.Link) || row.Summary.MediaChecked) continue;
             using var get = Command("SELECT payload FROM clips WHERE id=$id", ("$id", row.Id));
             if (get.ExecuteScalar() is byte[] raw && JsonSerializer.Deserialize<ClipPayload>(Unprotect(raw)) is { } p)
@@ -164,8 +196,37 @@ public sealed class HistoryStore : IDisposable
             if (c.ExecuteScalar() is not byte[] encrypted) return null;
             bytes = Unprotect(encrypted); if (!lowMemory) cache.Add(id, bytes);
         }
-        return JsonSerializer.Deserialize<ClipPayload>(bytes);
+        return ClipText.Normalize(JsonSerializer.Deserialize<ClipPayload>(bytes)!);
     });
+    // Small batches yield the database between repairs so paste/search stay responsive.
+    public Task<bool> RepairTextBatchAsync() => Work(() =>
+    {
+        var batch = new List<(long Id, ClipSummary Summary)>();
+        using (var c = Command("SELECT id,summary FROM clips WHERE id>$id AND kind IN (0,1) ORDER BY id LIMIT 16", ("$id", repairCursor)))
+        using (var r = c.ExecuteReader())
+            while (r.Read()) batch.Add((r.GetInt64(0), JsonSerializer.Deserialize<ClipSummary>(Unprotect((byte[])r[1]))!));
+        foreach (var (id, summary) in batch)
+        {
+            if (summary.TextVersion < 1) RepairText(id, summary);
+            repairCursor = id;
+        }
+        return batch.Count == 16;
+    });
+    private ClipSummary RepairText(long id, ClipSummary summary)
+    {
+        using var get = Command("SELECT payload FROM clips WHERE id=$id", ("$id", id));
+        if (get.ExecuteScalar() is not byte[] raw) return summary;
+        var payload = ClipText.Normalize(JsonSerializer.Deserialize<ClipPayload>(Unprotect(raw))!);
+        summary = summary with { Title = payload.Title, Preview = payload.Preview, TextVersion = 1 };
+        // Keep the original rich clipboard data and fingerprint intact. Plain text is recovered on read.
+        using var tx = db.BeginTransaction();
+        using var update = Command("UPDATE clips SET summary=$summary WHERE id=$id", ("$summary", Protect(JsonSerializer.SerializeToUtf8Bytes(summary))), ("$id", id));
+        update.Transaction = tx; update.ExecuteNonQuery();
+        using var insert = Command("INSERT OR IGNORE INTO tokens(token,clip_id) VALUES($token,$id)", ("$token", Array.Empty<byte>()), ("$id", id));
+        insert.Transaction = tx; insert.Prepare();
+        foreach (var token in IndexTokens(payload.SearchText)) { insert.Parameters["$token"].Value = Hash(token); insert.ExecuteNonQuery(); }
+        tx.Commit(); return summary;
+    }
     public Task SetPinAsync(long id, bool pin) => Work(() => { using var c = Command("UPDATE clips SET pinned=$pin WHERE id=$id", ("$pin", pin ? 1 : 0), ("$id", id)); c.ExecuteNonQuery(); Prune(); return true; });
     public Task DeleteAsync(IEnumerable<long> ids) => Work(() =>
     {
@@ -203,5 +264,10 @@ public sealed class HistoryStore : IDisposable
         using var c = Command("SELECT COUNT(*),COALESCE(SUM(pinned),0),COALESCE(SUM(bytes),0) FROM clips"); using var r = c.ExecuteReader(); r.Read();
         return new StoreStats(r.GetInt64(0), r.GetInt64(1), r.GetInt64(2), Directory.EnumerateFiles(Root, "history.db*").Sum(p => new FileInfo(p).Length));
     });
-    public void Dispose() { db.Dispose(); cache.Clear(); CryptographicOperations.ZeroMemory(key); gate.Dispose(); }
+    public void Dispose()
+    {
+        gate.Wait();
+        try { if (disposed) return; disposed = true; db.Dispose(); cache.Clear(); CryptographicOperations.ZeroMemory(key); }
+        finally { gate.Release(); }
+    }
 }

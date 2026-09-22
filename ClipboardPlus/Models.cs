@@ -15,15 +15,15 @@ public sealed record ClipPayload
     public string Title => Name ?? (Kind switch {
         ClipKind.Image => "Copied image",
         ClipKind.Files => Paths.Length == 1 ? Path.GetFileName(Paths[0].TrimEnd('\\')) : $"{Paths.Length} files and folders",
-        _ => Text.Trim().Split('\n')[0].TrimEnd('\r') is { Length: > 0 } s ? s[..Math.Min(s.Length, 180)] : "Empty text"
+        _ => ClipText.Display(Text) is { Length: > 0 } s ? s.Truncate(180) : Html is not null || Rtf is not null ? "Formatted text" : Text.Length > 0 ? "Whitespace text" : "Empty text"
     });
     public string Preview => Kind switch {
         ClipKind.Image => "Image saved locally · Open to zoom or extract text",
         ClipKind.Files => string.Join("  ·  ", Paths.Select(p => Path.GetFileName(p.TrimEnd('\\')))).Truncate(300),
-        _ => Text.Replace('\r', ' ').Replace('\n', ' ').Truncate(300)
+        _ => ClipText.Display(Text).Truncate(300)
     };
 }
-public sealed record ClipSummary(string Title, string Preview, string Source, byte[]? Thumbnail = null, string? MediaSource = null, bool MediaChecked = false);
+public sealed record ClipSummary(string Title, string Preview, string Source, byte[]? Thumbnail = null, string? MediaSource = null, bool MediaChecked = false, int TextVersion = 0);
 public sealed record ClipRow(long Id, ClipKind Kind, ClipSummary Summary, long Bytes, DateTimeOffset Created, DateTimeOffset Updated, bool Pinned)
 {
     public string Title => Summary.Title;

@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.1.0"
+  #define AppVersion "1.1.1"
 #endif
 #ifndef PayloadDir
   #error PayloadDir must point to the self-contained publish folder
@@ -41,7 +41,7 @@ DisableReadyPage=no
 Compression=lzma2
 SolidCompression=yes
 OutputBaseFilename=ClipboardPlus-Setup-{#AppVersion}-win-x64
-VersionInfoVersion={#AppVersion}.2
+VersionInfoVersion={#AppVersion}.0
 VersionInfoDescription=Clipboard Plus Setup
 CloseApplications=yes
 CloseApplicationsFilter=ClipboardPlus.exe

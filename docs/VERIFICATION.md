@@ -1,5 +1,7 @@
 # Verification record — 1.1.0
 
+For the current reliability update, see [1.1.1 verification](VERIFICATION-1.1.1.md). Results below are historical.
+
 Tested locally on Windows 11 build 26200 with .NET SDK 10.0.303. Results are measurements on this machine, not guarantees for every PC, app, or media codec.
 
 ## Corrected 1.1 build 2 checks
