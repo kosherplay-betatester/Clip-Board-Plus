@@ -1,0 +1,447 @@
+[
+  {
+    "test": "HTML-only stream recovers readable Unicode text while preserving original rich data",
+    "result": "passed"
+  },
+  {
+    "test": "RTF-only capture has readable list and plain-paste text",
+    "result": "passed"
+  },
+  {
+    "test": "An explicit invisible or whitespace-only plain string is preserved exactly",
+    "result": "passed"
+  },
+  {
+    "test": "Whitespace-only clips have honest labels and Unicode previews remain readable",
+    "result": "passed"
+  },
+  {
+    "test": "Preview normalization never changes nonempty original plain text",
+    "result": "passed"
+  },
+  {
+    "test": "Preview extraction excludes scripts, styles, and explicitly hidden content",
+    "result": "passed"
+  },
+  {
+    "test": "Malformed or excessive markup retains a useful fallback instead of failing capture",
+    "result": "passed"
+  },
+  {
+    "test": "Upgrade preserves IDs and pins and repairs encrypted legacy blank summaries",
+    "result": "passed"
+  },
+  {
+    "test": "Legacy recovery updates search and retains original rich payload",
+    "result": "passed"
+  },
+  {
+    "test": "Twenty clear-and-add cycles never alias a removed row or queued clip ID",
+    "result": "passed"
+  },
+  {
+    "test": "Deleting the highest ID never reuses that identity",
+    "result": "passed"
+  },
+  {
+    "test": "Schema migration and subsequent deletion retain valid search-index foreign keys",
+    "result": "passed"
+  },
+  {
+    "test": "Recovered text survives storage, lookup, and search",
+    "result": "passed"
+  },
+  {
+    "test": "Code fixture 1: capture, encrypted storage and exact-text replay preserve every UTF-16 code unit",
+    "result": "passed"
+  },
+  {
+    "test": "Code fixture 2: capture, encrypted storage and exact-text replay preserve every UTF-16 code unit",
+    "result": "passed"
+  },
+  {
+    "test": "Code fixture 3: capture, encrypted storage and exact-text replay preserve every UTF-16 code unit",
+    "result": "passed"
+  },
+  {
+    "test": "Code fixture 4: capture, encrypted storage and exact-text replay preserve every UTF-16 code unit",
+    "result": "passed"
+  },
+  {
+    "test": "Code fixture 5: capture, encrypted storage and exact-text replay preserve every UTF-16 code unit",
+    "result": "passed"
+  },
+  {
+    "test": "Oversized rich formatting keeps the entire exact plain text with a visible capture note",
+    "result": "passed"
+  },
+  {
+    "test": "Oversized code is rejected explicitly instead of truncating the text",
+    "result": "passed"
+  },
+  {
+    "test": "UTF-16 stream decoding preserves leading and trailing BOM characters",
+    "result": "passed"
+  },
+  {
+    "test": "Malformed Unicode is rejected instead of silently replacing a broken character",
+    "result": "passed"
+  },
+  {
+    "test": "Streaming fingerprints remain compatible with 1.1.1 deduplication across source editors",
+    "result": "passed"
+  },
+  {
+    "test": "Identical content deduplicates across source apps",
+    "result": "passed"
+  },
+  {
+    "test": "Rich formats survive encrypted storage",
+    "result": "passed"
+  },
+  {
+    "test": "Indexed prefix search ANDs multiple words",
+    "result": "passed"
+  },
+  {
+    "test": "Source app is searchable",
+    "result": "passed"
+  },
+  {
+    "test": "Unmatched search returns no entries",
+    "result": "passed"
+  },
+  {
+    "test": "Content filter excludes unrelated kinds",
+    "result": "passed"
+  },
+  {
+    "test": "Date filter applies to history",
+    "result": "passed"
+  },
+  {
+    "test": "Pins are queryable",
+    "result": "passed"
+  },
+  {
+    "test": "Turning existing content into a named snippet updates summary, payload cache, and search index",
+    "result": "passed"
+  },
+  {
+    "test": "Capacity eviction preserves pins and enforces item count",
+    "result": "passed"
+  },
+  {
+    "test": "History paging has no gaps or overlapping entries",
+    "result": "passed"
+  },
+  {
+    "test": "Database does not contain plaintext payload or summary",
+    "result": "passed"
+  },
+  {
+    "test": "Clear unpinned keeps pinned content",
+    "result": "passed"
+  },
+  {
+    "test": "Oversized item is rejected before persistence",
+    "result": "passed"
+  },
+  {
+    "test": "Deletion removes payload, cache, and index entries",
+    "result": "passed"
+  },
+  {
+    "test": "History and key survive process-style reopen",
+    "result": "passed"
+  },
+  {
+    "test": "LRU cache evicts the least recently used payload",
+    "result": "passed"
+  },
+  {
+    "test": "Zero cache budget releases all cached payloads",
+    "result": "passed"
+  },
+  {
+    "test": "Custom hotkey parsing",
+    "result": "passed"
+  },
+  {
+    "test": "Win+V replacement specification",
+    "result": "passed"
+  },
+  {
+    "test": "Numeric shortcut maps to the digit virtual key",
+    "result": "passed"
+  },
+  {
+    "test": "Win+V state suppresses both edges and avoids repeated opens",
+    "result": "passed"
+  },
+  {
+    "test": "Win+V state leaves unrelated modifier combinations untouched",
+    "result": "passed"
+  },
+  {
+    "test": "Custom shortcut registers globally on the dedicated worker",
+    "result": "passed"
+  },
+  {
+    "test": "Windows accepts the Win+V replacement keyboard hook",
+    "result": "passed"
+  },
+  {
+    "test": "Returning to custom shortcut removes the Windows-key hook",
+    "result": "passed"
+  },
+  {
+    "test": "F12 uses a native hook rather than reserved RegisterHotKey",
+    "result": "passed"
+  },
+  {
+    "test": "Shortcut is suspended while recording a new key",
+    "result": "passed"
+  },
+  {
+    "test": "Canceling recorder restores the previous shortcut",
+    "result": "passed"
+  },
+  {
+    "test": "Single Scroll Lock key is supported",
+    "result": "passed"
+  },
+  {
+    "test": "Single F12 and Scroll Lock shortcuts parse",
+    "result": "passed"
+  },
+  {
+    "test": "More than three shortcut keys are rejected",
+    "result": "passed"
+  },
+  {
+    "test": "Background startup initializes capture, tray, and shortcut without showing or activating the panel",
+    "result": "passed"
+  },
+  {
+    "test": "Excluded app names match exact process names",
+    "result": "passed"
+  },
+  {
+    "test": "Recorder formats captured key combinations and Scroll Lock",
+    "result": "passed"
+  },
+  {
+    "test": "Manual update check identifies newer and current release versions",
+    "result": "passed"
+  },
+  {
+    "test": "Windows history automatic and independent overrides map to the requested preference",
+    "result": "passed"
+  },
+  {
+    "test": "Windows history preference writes disabled to an isolated test key",
+    "result": "passed"
+  },
+  {
+    "test": "Windows history preference writes enabled to an isolated test key",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard capture preserves text and HTML",
+    "result": "passed"
+  },
+  {
+    "test": "Plain-text paste strips rich formats",
+    "result": "passed"
+  },
+  {
+    "test": "Mixed file and folder selections round-trip by reference",
+    "result": "passed"
+  },
+  {
+    "test": "Historical file replay copies instead of repeating stale moves",
+    "result": "passed"
+  },
+  {
+    "test": "Missing original file is reported before paste",
+    "result": "passed"
+  },
+  {
+    "test": "Direct bitmap capture and replay",
+    "result": "passed"
+  },
+  {
+    "test": "Mixed selection includes ordered text, deduplicated file references and image formats",
+    "result": "passed"
+  },
+  {
+    "test": "Batch image export preserves original pixels without copying source files",
+    "result": "passed"
+  },
+  {
+    "test": "Single-item batch preserves rich text formats",
+    "result": "passed"
+  },
+  {
+    "test": "Multiple text selections combine in supplied order",
+    "result": "passed"
+  },
+  {
+    "test": "Missing source aborts whole batch rather than silently copying partial selection",
+    "result": "passed"
+  },
+  {
+    "test": "PNG-only clipboard image preserves its original encoded bytes",
+    "result": "passed"
+  },
+  {
+    "test": "Image list loads a bounded thumbnail rather than the full-resolution bitmap",
+    "result": "passed"
+  },
+  {
+    "test": "Second image preview opens its own payload even with the first image selected and open",
+    "result": "passed"
+  },
+  {
+    "test": "Refresh preserves multiple selection and never restores selection captured before an asynchronous query",
+    "result": "passed"
+  },
+  {
+    "test": "Disk budget evicts old large clips and retains the newest",
+    "result": "passed"
+  },
+  {
+    "test": "Newest large clip remains readable after quota eviction",
+    "result": "passed"
+  },
+  {
+    "test": "Time-based expiry removes old clips but preserves pins",
+    "result": "passed"
+  },
+  {
+    "test": "Real WM_CLIPBOARDUPDATE capture on dedicated STA thread",
+    "result": "passed"
+  },
+  {
+    "test": "Real clipboard replay succeeds without capture feedback loop",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard write 1 completes with fresh content before paste",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard write 2 completes with fresh content before paste",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard write 3 completes with fresh content before paste",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard write 4 completes with fresh content before paste",
+    "result": "passed"
+  },
+  {
+    "test": "Clipboard write 5 completes with fresh content before paste",
+    "result": "passed"
+  },
+  {
+    "test": "Paste receipt verifies the exact per-write marker on the real clipboard",
+    "result": "passed"
+  },
+  {
+    "test": "Concurrent app copy cannot replace content while a paste delivery is in progress",
+    "result": "passed"
+  },
+  {
+    "test": "Deferred clipboard writer completes after paste delivery releases the gate",
+    "result": "passed"
+  },
+  {
+    "test": "External clipboard replacement invalidates the paste receipt instead of pasting foreign content",
+    "result": "passed"
+  },
+  {
+    "test": "Twenty real Unicode copy events retain the correct payload and order",
+    "result": "passed"
+  },
+  {
+    "test": "Real capture respects history exclusion format",
+    "result": "passed"
+  },
+  {
+    "test": "Real capture respects CanIncludeInClipboardHistory false",
+    "result": "passed"
+  },
+  {
+    "test": "Paused capture does not retain new clipboard data",
+    "result": "passed"
+  },
+  {
+    "test": "Excluded source process is not captured",
+    "result": "passed"
+  },
+  {
+    "test": "Live clipboard integration completes without service errors",
+    "result": "passed"
+  },
+  {
+    "test": "Real Windows exact-text clipboard replay preserves all five code fixtures character-for-character",
+    "result": "passed"
+  },
+  {
+    "test": "32 MiB code clip survives encrypted storage without changing order, tabs, spaces, escapes, Unicode or final sentinel",
+    "result": "passed"
+  },
+  {
+    "test": "Large code is stored once without duplicate search text and bypasses a smaller memory cache",
+    "result": "passed"
+  },
+  {
+    "test": "32 MiB code clip reopens from disk and returns to the real Windows clipboard with exact character equality",
+    "result": "passed"
+  },
+  {
+    "test": "Large code remains searchable through its bounded keyword index",
+    "result": "passed"
+  },
+  {
+    "test": "32 MiB encrypted save/reopen/clipboard round trip finishes in 3.41s on the test machine",
+    "result": "passed"
+  },
+  {
+    "test": "Twenty-four selected/clicked Paste requests publish the exact requested text despite a stale queue; stale search results are rejected",
+    "result": "passed"
+  },
+  {
+    "test": "Local audio preview starts on request, advances, and releases player on close",
+    "result": "passed"
+  },
+  {
+    "test": "Local H.264 video preview starts on request, advances, and releases player on close",
+    "result": "passed"
+  },
+  {
+    "test": "Inline MP3 controls play, pause, seek, stop, and release their decoder",
+    "result": "passed"
+  },
+  {
+    "test": "Video row controls launch player, pause, seek, stop, and release it",
+    "result": "passed"
+  },
+  {
+    "test": "Media row exposes a source reference without importing file content",
+    "result": "passed"
+  },
+  {
+    "test": "Existing media history gains inline playback without recopying the source",
+    "result": "passed"
+  },
+  {
+    "summary": "passed",
+    "passed": 110,
+    "elapsedMs": 13565
+  }
+]

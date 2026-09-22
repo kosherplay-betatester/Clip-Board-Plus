@@ -79,7 +79,7 @@ public sealed class ClipboardService : IDisposable
                     var payload = ReadPayload(data, owner, config.MaxItemMb * 1048576L);
                     if (sequence != Native.GetClipboardSequenceNumber()) return;
                     lastCaptured = sequence;
-                    if (payload is not null) await save(payload);
+                    if (payload is not null) { await save(payload); if (payload.CaptureNote is not null) status(payload.CaptureNote); }
                     return;
                 }
                 catch (ExternalException) when (attempt < 4) { await Task.Delay(20 * (attempt + 1)); }
@@ -128,9 +128,16 @@ public sealed class ClipboardService : IDisposable
         string? html = ClipText.Read(data.GetData(DataFormats.Html)), rtf = ClipText.Read(data.GetData(DataFormats.Rtf));
         if (text is null && html is null && rtf is null) return null;
         text ??= "";
-        if ((long)(text.Length + (html?.Length ?? 0) + (rtf?.Length ?? 0)) * 2 > limit) throw new InvalidOperationException("Text exceeds the item size limit.");
+        string? note = null;
+        if ((long)text.Length * 2 > limit) throw new InvalidOperationException("Text exceeds Maximum single clip in Settings. Nothing was truncated; the original clipboard is unchanged. Raise the limit (up to 64 MB) to save larger code clips.");
+        if (((long)text.Length + (html?.Length ?? 0) + (rtf?.Length ?? 0)) * 2 > limit)
+        {
+            if (!ClipText.HasVisibleText(text)) throw new InvalidOperationException("Rich content exceeds the clip size limit. Increase Maximum single clip in Settings.");
+            html = null; rtf = null;
+            note = "Full text saved. Extra rich formatting exceeded the clip size limit and was omitted.";
+        }
         var isLink = Uri.TryCreate(text.Trim(), UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http";
-        return ClipText.Normalize(new() { Kind = isLink ? ClipKind.Link : ClipKind.Text, Text = text, Html = html, Rtf = rtf, Source = owner });
+        return ClipText.Normalize(new() { Kind = isLink ? ClipKind.Link : ClipKind.Text, Text = text, Html = html, Rtf = rtf, Source = owner, CaptureNote = note });
     }
     internal static System.Windows.DataObject CreateData(ClipPayload payload, bool plain)
     {

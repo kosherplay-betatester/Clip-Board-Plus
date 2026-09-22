@@ -49,7 +49,7 @@ public partial class MainWindow : Window
     {
         initialized = true;
         var handle = new WindowInteropHelper(this).EnsureHandle();
-        clipboard = new(settings, async payload => { await store.AddAsync(payload); _ = Dispatcher.BeginInvoke(MarkHistoryChanged); }, SetStatus);
+        clipboard = new(settings, async payload => { await store.AddAsync(payload); _ = Dispatcher.BeginInvoke(MarkHistoryChanged); }, text => Dispatcher.BeginInvoke(() => { SetStatus(text); if (!IsVisible && tray is not null && (text.StartsWith("Clip not saved:", StringComparison.Ordinal) || text.StartsWith("Full text saved.", StringComparison.Ordinal))) tray.ShowBalloonTip(5000, "Clipboard Plus", text, System.Windows.Forms.ToolTipIcon.Info); }));
         clipboard.Paused = demo;
         await clipboard.Ready;
         hotkeys = new(handle, ShowPanel);
@@ -318,7 +318,8 @@ public partial class MainWindow : Window
     {
         var menu = new ContextMenu();
         void Add(string title, Func<Task> action) { var item = new MenuItem { Header = title }; item.Click += async (_, _) => await Safe(action); menu.Items.Add(item); }
-        Add("Paste as plain text    Ctrl+Enter", () => PasteAsync(true));
+        Add("Paste exact text (no formatting)    Ctrl+Enter", () => PasteAsync(true));
+        Add("Copy exact text (no formatting)", () => PasteAsync(true, true));
         Add("Preview    Space", () => { Preview_Click(this, new()); return Task.CompletedTask; });
         menu.Items.Add(new Separator());
         Add("Queue selected clips (list order)", () => { foreach (var row in rows.Where(r => ClipList.SelectedItems.Contains(r))) pasteQueue.Enqueue(row.Id); UpdateQueue(); SetStatus($"{pasteQueue.Count} clips in the paste queue."); return Task.CompletedTask; });

@@ -9,19 +9,45 @@ namespace ClipboardPlus;
 // Parses clipboard markup locally. Never renders HTML, executes scripts, or fetches resources.
 internal static class ClipText
 {
+    internal static void ValidateUnicode(string text)
+    {
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (char.IsHighSurrogate(text[i]))
+            {
+                if (i + 1 < text.Length && char.IsLowSurrogate(text[i + 1])) { i++; continue; }
+                throw new InvalidOperationException("Text contains an incomplete Unicode character and cannot be saved losslessly. The original clipboard is unchanged.");
+            }
+            if (char.IsLowSurrogate(text[i])) throw new InvalidOperationException("Text contains an incomplete Unicode character and cannot be saved losslessly. The original clipboard is unchanged.");
+        }
+    }
     private static readonly Lazy<Dispatcher> rtfDispatcher = new(() =>
     {
         var ready = new TaskCompletionSource<Dispatcher>(TaskCreationOptions.RunContinuationsAsynchronously);
         var worker = new Thread(() => { ready.SetResult(Dispatcher.CurrentDispatcher); Dispatcher.Run(); }) { IsBackground = true, Name = "Clipboard Plus text conversion" };
         worker.SetApartmentState(ApartmentState.STA); worker.Start(); return ready.Task.GetAwaiter().GetResult();
     });
-    internal static string Display(string text) => Regex.Replace(text.Replace("\0", "").Replace("\uFEFF", "").Replace("\u200B", ""), @"\s+", " ").Trim();
+    internal static bool HasVisibleText(string text) => text.Any(c => c is not ('\0' or '\uFEFF' or '\u200B') && !char.IsWhiteSpace(c));
+    internal static string Display(string text, int limit = int.MaxValue)
+    {
+        var result = new StringBuilder(Math.Min(limit, 300)); bool space = false;
+        foreach (char c in text)
+        {
+            if (c is '\0' or '\uFEFF' or '\u200B') continue;
+            if (char.IsWhiteSpace(c)) { space = result.Length > 0; continue; }
+            if (space) result.Append(' ');
+            result.Append(c); space = false;
+            if (result.Length > limit) return result.ToString(0, limit) + "…";
+        }
+        return result.ToString();
+    }
     internal static ClipPayload Normalize(ClipPayload payload)
     {
-        if (payload.Kind is not (ClipKind.Text or ClipKind.Link) || Display(payload.Text).Length > 0) return payload;
+        // A supplied plain string is authoritative, including indentation-only or invisible text.
+        if (payload.Kind is not (ClipKind.Text or ClipKind.Link) || payload.Text.Length > 0) return payload;
         string plain = FromHtml(payload.Html);
-        if (Display(plain).Length == 0) plain = FromRtf(payload.Rtf);
-        return Display(plain).Length > 0 ? payload with { Text = plain } : payload;
+        if (!HasVisibleText(plain)) plain = FromRtf(payload.Rtf);
+        return HasVisibleText(plain) ? payload with { Text = plain } : payload;
     }
     internal static string FromHtml(string? html)
     {
@@ -68,9 +94,9 @@ internal static class ClipText
     }
     internal static string? Read(object? value, bool unicode = false)
     {
-        if (value is string text) return text.TrimEnd('\0');
+        if (value is string text) return text;
         byte[]? bytes = value switch { MemoryStream stream => stream.ToArray(), byte[] array => array, _ => null };
         if (bytes is null) return null;
-        return (unicode ? Encoding.Unicode : Encoding.UTF8).GetString(bytes).TrimEnd('\0', '\uFEFF');
+        return (unicode ? Encoding.Unicode : Encoding.UTF8).GetString(bytes).TrimEnd('\0');
     }
 }

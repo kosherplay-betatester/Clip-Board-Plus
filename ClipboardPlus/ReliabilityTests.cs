@@ -17,7 +17,7 @@ internal static class ReliabilityTests
         rtfOnly.SetData(DataFormats.Rtf, @"{\rtf1\ansi Rich \b words\b0\par Next paragraph}", false);
         var rtf = ClipboardService.ReadPayload(rtfOnly, "RTF editor", 1048576)!;
         check(rtf.Text.Contains("Rich words") && rtf.Text.Contains("Next paragraph") && rtf.Title != "Empty text", "RTF-only capture has readable list and plain-paste text");
-        check(ClipText.Normalize(new() { Text = "\r\n\u200B", Html = "<div>Recovered text</div>" }).Title == "Recovered text", "Invisible text falls back to the rich content preview");
+        check(ClipText.Normalize(new() { Text = "\r\n\u200B", Html = "<div>Other representation</div>" }).Text == "\r\n\u200B", "An explicit invisible or whitespace-only plain string is preserved exactly");
         check(new ClipPayload { Text = "\t\n " }.Title == "Whitespace text" && ClipText.Display("\uFEFF\n你好\tשלום\0") == "你好 שלום", "Whitespace-only clips have honest labels and Unicode previews remain readable");
         check(ClipText.Normalize(new() { Text = "  keep\r\nspacing  ", Html = "<b>different</b>" }).Text == "  keep\r\nspacing  ", "Preview normalization never changes nonempty original plain text");
         check(ClipText.FromHtml("<div hidden>hidden</div><style>hidden</style><p>Visible<br>line</p>").Contains("Visible") && !ClipText.FromHtml("<script>secret</script>").Contains("secret"), "Preview extraction excludes scripts, styles, and explicitly hidden content");

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.2 — 2026-09-22
+
+- Explicit **Paste exact text** (Ctrl+Enter) and **Copy exact text** actions preserve source code without rich formatting, trimming, reindentation, newline conversion or escape expansion.
+- Preserve authoritative whitespace-only/invisible plain text and leading/trailing Unicode BOM characters. Reject malformed Unicode before serialization can replace it.
+- Store original payload fields once, without duplicating the entire code as a persisted search field. Stream deduplication hashing and build bounded list previews; existing 1.1.1 fingerprints remain compatible.
+- Bound indexing of giant/minified clips to 262,144 text characters and 16,384 prefix tokens. Full original content is retained. Cache budgets continue to exclude oversized payloads.
+- If rich formatting alone exceeds the item budget, retain the complete original plain text and report the formatting omission. Oversized plain text gets a visible rejection notice instead of truncation.
+- Added exact-character fixtures covering C#/Python/JavaScript-like code, mixed line endings, indentation, trailing spaces, escaped characters, multilingual Unicode and invisible characters. A 32 MiB / 16-million-character clip passed encrypted save/reopen/native-clipboard equality testing.
+
 ## 1.1.1 — 2026-09-22
 
 - Normal Paste and Enter use the selected clip. The queue has its own **Paste next queued** button and no longer silently overrides selection.

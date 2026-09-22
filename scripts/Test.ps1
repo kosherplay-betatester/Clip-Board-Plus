@@ -1,4 +1,4 @@
-param([switch]$Clipboard, [switch]$Media, [switch]$Benchmark, [switch]$InputTest)
+param([switch]$Clipboard, [switch]$Media, [switch]$Benchmark, [switch]$InputTest, [switch]$LargeCode)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 dotnet build (Join-Path $projectRoot 'ClipboardPlus\ClipboardPlus.csproj') -c Release
@@ -7,7 +7,8 @@ $artifactRoot = Join-Path $projectRoot 'artifacts'
 New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
 $reportPath = Join-Path $artifactRoot 'test-results.json'
 $arguments = @('--self-test', '--report', ('"' + $reportPath + '"'))
-if ($Clipboard) { $arguments += '--clipboard-test' }
+if ($Clipboard -or $LargeCode) { $arguments += '--clipboard-test' }
+if ($LargeCode) { $arguments += '--large-code-test' }
 if ($InputTest) { $arguments += '--input-test' }
 if ($Benchmark) { $arguments += '--benchmark' }
 if ($Media) {

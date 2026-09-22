@@ -22,9 +22,9 @@
     <TextBlock Text="Keep unpinned items (days)" Grid.Row="1" VerticalAlignment="Center"/><TextBox x:Name="DaysBox" Grid.Row="1" Grid.Column="1" Margin="0,4" AutomationProperties.Name="Retention days"/>
     <TextBlock Text="History disk budget (MB)" Grid.Row="2" VerticalAlignment="Center"/><TextBox x:Name="DiskBox" Grid.Row="2" Grid.Column="1" Margin="0,4" AutomationProperties.Name="Disk budget MB"/>
     <TextBlock Text="Memory cache budget (MB)" Grid.Row="3" VerticalAlignment="Center"/><TextBox x:Name="CacheBox" Grid.Row="3" Grid.Column="1" Margin="0,4" AutomationProperties.Name="Memory cache MB"/>
-    <TextBlock Text="Maximum single clip (MB)" Grid.Row="4" VerticalAlignment="Center"/><TextBox x:Name="ItemBox" Grid.Row="4" Grid.Column="1" Margin="0,4" AutomationProperties.Name="Maximum clip MB"/>
+    <TextBlock Text="Maximum single clip (MB)" ToolTip="1–64 MB. Raise this for very large code clips." Grid.Row="4" VerticalAlignment="Center"/><TextBox x:Name="ItemBox" Grid.Row="4" Grid.Column="1" Margin="0,4" AutomationProperties.Name="Maximum clip MB"/>
    </Grid>
-   <TextBlock Text="History lives on disk. The cache is only a small working set, not a hard cap on total app RAM. Previewing media uses extra memory temporarily. File references do not duplicate source files." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,10,0,8"/>
+   <TextBlock Text="Text is never truncated to fit. Oversized text is rejected with a notice. If only extra rich formatting is too large, the full original plain text is kept. History lives on disk. The cache is only a small working set, not a hard cap on total app RAM. Previewing media uses extra memory temporarily. File references do not duplicate source files." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,10,0,8"/>
    <TextBlock Text="Oldest unpinned clips are removed first. Pins are kept even if they exceed your limits; remove pins or raise the budget if new clips cannot be saved." TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12"/>
    <TextBlock x:Name="UsageLabel" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,12"/>
    <Button Content="Use recommended memory cache" HorizontalAlignment="Left" Click="Recommend_Click"/>

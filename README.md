@@ -23,6 +23,7 @@
 
 ## Feature highlights
 
+- **Code stays exact:** Ctrl+Enter or Actions → Paste exact text publishes the original plain string with tabs, indentation, spaces, CRLF/LF line endings, escapes, Unicode and trailing newlines intact. Copy exact text is also available. A 32 MiB / 16-million-character code fixture passed storage/reopen/real-clipboard equality tests.
 - **Readable rich-text history:** HTML/RTF-only copies gain searchable text previews and plain-text paste. Existing blank previews repair locally in small batches, preserving the original rich content.
 - **Stable choices:** incoming copies show a **New clips** button instead of moving items underneath your pointer. Reopening history or refreshing shows the latest captures.
 - **Guarded repeat pasting:** double-click acts on the clicked item, keeps its destination snapshot, and checks focus and clipboard changes before sending paste.
@@ -46,11 +47,19 @@ A native Windows clipboard history app built with .NET 10, WPF, Windows clipboar
 
 [Browse every release and its notes](https://github.com/kosherplay-betatester/Clip-Board-Plus/releases). Requires Windows 10 version 2004 or later / Windows 11, x64.
 
-Download **ClipboardPlus-Setup-1.1.1-win-x64.exe** from GitHub Releases and follow the setup wizard. It installs for your Windows account without administrator privileges and offers a desktop shortcut, optional startup at sign-in, and launch on completion. Updates reuse the same installation; your separate clipboard history is preserved. Uninstall through Windows Apps.
+Download **ClipboardPlus-Setup-1.1.2-win-x64.exe** from GitHub Releases and follow the setup wizard. It installs for your Windows account without administrator privileges and offers a desktop shortcut, optional startup at sign-in, and launch on completion. Updates reuse the same installation; your separate clipboard history is preserved. Uninstall through Windows Apps.
 
-**1.1.1 is a reliability update.** It repairs existing blank text previews, recovers text from HTML/RTF-only copies, keeps rows stable while you choose a clip, and separates queued paste from normal Paste/Enter. Use Settings → Check for updates or download the new installer. Setup asks before closing a running app and keeps it running if you decline. Silent setup will not close a running app automatically.
+**1.1.2 adds exact code handling to the reliability fixes.** It repairs existing blank text previews, recovers text from HTML/RTF-only copies, keeps rows stable while you choose a clip, and separates queued paste from normal Paste/Enter. Use Settings → Check for updates or download the new installer. Setup asks before closing a running app and keeps it running if you decline. Silent setup will not close a running app automatically.
 
 Prefer portable? Extract **ClipboardPlus-win-x64.zip** into a permanent folder and run **ClipboardPlus.exe**. Both downloads include .NET and work offline after download.
+
+### Working with large code
+
+Use **Ctrl+Enter** for exact text without HTML/RTF formatting. Clipboard Plus does not reindent, normalize line endings, trim whitespace, change letter case, or expand escapes on this path. Those transformations are separate, explicitly named Actions. Your editor can still apply its own auto-indent or format-on-paste rules after receiving text.
+
+**Settings → Maximum single clip** accepts up to **64 MB**; the existing 16 MB default and your chosen budgets remain in effect until you change them. The 32 MiB code test uses the 64 MB setting. Oversized text is rejected with a tray notice, never saved as a truncated snippet. If only the accompanying rich formats exceed the limit, the full original plain text is saved and the omitted formatting is reported. Malformed Unicode is rejected rather than silently replaced.
+
+Large clips live encrypted on disk. They are not duplicated as persisted search strings, and clips larger than the chosen cache budget are not cached. To keep giant/minified files from blocking ordinary history operations, keyword indexing uses the first **262,144 text characters**, plus labels/source/paths, with at most **16,384 prefix tokens per clip**. This limits search coverage for huge clips; the entire original text is stored and restored. The clipboard carries characters, not a source file’s original byte encoding.
 
 The default shortcut is **Ctrl+Shift+V**. Closing the panel keeps capture running in the notification area. Use the tray menu to quit. Startup at sign-in is optional in Settings. It initializes silently in the tray. Keep the extracted folder in a permanent location before enabling startup; moving it later requires saving the startup setting again.
 
@@ -149,8 +158,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [SECURITY.m
 Install Inno Setup 6 on the build machine (it is not an app dependency), then:
 
 ```powershell
-./scripts/Publish.ps1 -OutputRoot artifacts/releases/v1.1.1
+./scripts/Publish.ps1 -OutputRoot artifacts/releases/v1.1.2
 ./scripts/Build-Installer.ps1
 ```
 
-The installer and portable ZIP are written to `artifacts/releases/v1.1.1/`. Installer artwork lives under `installer/assets/`; regenerate it with the built app's `--write-installer-art installer/assets` command. `Build-Installer.ps1 -InstallerTest` creates an isolated test product with a separate App ID, shortcuts, and startup registry value; this test installer is never distributed.
+The installer and portable ZIP are written to `artifacts/releases/v1.1.2/`. Installer artwork lives under `installer/assets/`; regenerate it with the built app's `--write-installer-art installer/assets` command. `Build-Installer.ps1 -InstallerTest` creates an isolated test product with a separate App ID, shortcuts, and startup registry value; this test installer is never distributed.

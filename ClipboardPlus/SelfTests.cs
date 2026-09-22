@@ -16,6 +16,7 @@ internal static class SelfTests
         try
         {
             await ReliabilityTests.RunAsync(root, Check);
+            await CodeTests.CoreAsync(root, Check);
             var config = new AppSettings { MaxItems = 100, CacheBudgetMb = 1 };
             using (var store = new HistoryStore(root, config))
             {
@@ -148,7 +149,7 @@ internal static class SelfTests
             {
                 await expiry.MaintainAsync(); Check((await expiry.StatsAsync()).Count == 1 && (await expiry.QueryAsync(new())).Single().Pinned, "Time-based expiry removes old clips but preserves pins");
             }
-            if (args.Contains("--clipboard-test")) await ClipboardIntegrationAsync(Check);
+            if (args.Contains("--clipboard-test")) await ClipboardIntegrationAsync(Check, args.Contains("--large-code-test"));
             if (args.Contains("--input-test"))
             {
                 System.Windows.IDataObject? previous;
@@ -220,7 +221,7 @@ internal static class SelfTests
             report.Add(new { summary = "failed", passed, error = e.ToString(), temporaryData = root }); await WriteReport(args, report); return 1;
         }
     }
-    private static async Task ClipboardIntegrationAsync(Action<bool, string> check)
+    private static async Task ClipboardIntegrationAsync(Action<bool, string> check, bool largeCode = false)
     {
         // This opt-in integration suite changes the real Windows clipboard, then restores its previous data object.
         System.Windows.IDataObject? previous = null;
@@ -285,6 +286,13 @@ internal static class SelfTests
             service.Paused = false; service.Configure(new() { ExcludedApps = "ClipboardPlus" }); System.Windows.Clipboard.SetText("Excluded process synthetic fixture"); await Task.Delay(150);
             check(received.IsEmpty, "Excluded source process is not captured");
             check(issues.IsEmpty, "Live clipboard integration completes without service errors");
+            foreach (string fixture in CodeTests.Fixtures)
+            {
+                await service.PutAsync(new() { Text = fixture, Html = "<b>Do not substitute this representation</b>" }, true);
+                if (!System.Windows.Clipboard.GetText().Equals(fixture, StringComparison.Ordinal)) throw new InvalidOperationException("Code changed during native clipboard replay");
+            }
+            check(true, "Real Windows exact-text clipboard replay preserves all five code fixtures character-for-character");
+            if (largeCode) await CodeTests.LargeAsync(Path.Combine(Path.GetTempPath(), "ClipboardPlus-Code-" + Guid.NewGuid().ToString("N")), service, check);
             using var routingStore = new HistoryStore(Path.Combine(Path.GetTempPath(), "ClipboardPlus-Routing-" + Guid.NewGuid().ToString("N")), new());
             check(await MainWindow.VerifyClipboardRoutingAsync(routingStore), "Twenty-four selected/clicked Paste requests publish the exact requested text despite a stale queue; stale search results are rejected");
         }

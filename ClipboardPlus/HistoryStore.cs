@@ -14,6 +14,8 @@ public sealed class HistoryStore : IDisposable
     private int writesSinceCheckpoint;
     private long repairCursor;
     private bool disposed;
+    // Persist original data once; computed labels/search text belong to summaries/indexes.
+    private static readonly JsonSerializerOptions payloadJson = new() { IgnoreReadOnlyProperties = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     public string Root { get; }
     public long CacheBytes => cache.Bytes;
     public HistoryStore(string root, AppSettings settings)
@@ -83,11 +85,16 @@ public sealed class HistoryStore : IDisposable
     private long Add(ClipPayload payload, bool pin)
     {
         payload = ClipText.Normalize(payload);
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(payload);
+        ClipText.ValidateUnicode(payload.Text);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(payload, payloadJson);
         if (bytes.Length > settings.MaxItemMb * 1048576L) throw new InvalidOperationException("Clip exceeds the individual item limit. Increase it in Settings if needed.");
         // Source application and a user-assigned label must not prevent content deduplication.
-        var canonical = JsonSerializer.SerializeToUtf8Bytes(payload with { Source = "", Name = null });
-        var fingerprint = HMACSHA256.HashData(key, canonical);
+        // Keep the existing fingerprint representation for deduplication, but stream it instead of
+        // allocating a second multi-megabyte serialized copy. Derived fields aren't persisted.
+        using var hash = new HMACSHA256(key);
+        using var hashStream = new CryptoStream(Stream.Null, hash, CryptoStreamMode.Write);
+        JsonSerializer.Serialize(hashStream, payload with { Source = "", Name = null, CaptureNote = null });
+        hashStream.FlushFinalBlock(); var fingerprint = hash.Hash!;
         bool rename = pin && payload.Name is not null;
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         using var tx = db.BeginTransaction();
@@ -100,7 +107,7 @@ public sealed class HistoryStore : IDisposable
                 bytes=CASE WHEN $rename=1 THEN excluded.bytes ELSE clips.bytes END
             RETURNING id;
             """, ("$hash", fingerprint), ("$kind", (int)payload.Kind),
-            ("$summary", Protect(JsonSerializer.SerializeToUtf8Bytes(new ClipSummary(payload.Title, payload.Preview, payload.Source, MakeThumbnail(payload.Image), MediaSourceInfo.From(payload), true, 1)))),
+            ("$summary", Protect(JsonSerializer.SerializeToUtf8Bytes(new ClipSummary(payload.Title, payload.Preview, payload.Source, MakeThumbnail(payload.Image), MediaSourceInfo.From(payload), true, 1, payload.CaptureNote)))),
             ("$payload", Protect(bytes)), ("$bytes", bytes.LongLength), ("$now", now), ("$pin", pin ? 1 : 0), ("$rename", rename ? 1 : 0));
         cmd.Transaction = tx;
         var id = (long)cmd.ExecuteScalar()!;
@@ -113,7 +120,7 @@ public sealed class HistoryStore : IDisposable
         {
             using var insert = Command("INSERT OR IGNORE INTO tokens(token,clip_id) VALUES($token,$id)", ("$token", Array.Empty<byte>()), ("$id", id));
             insert.Transaction = tx; insert.Prepare();
-            foreach (var token in IndexTokens(payload.SearchText))
+            foreach (var token in IndexTokens(IndexableText(payload)))
             {
                 insert.Parameters["$token"].Value = Hash(token); insert.ExecuteNonQuery();
             }
@@ -143,10 +150,11 @@ public sealed class HistoryStore : IDisposable
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var word in Words(text))
         {
-            for (int i = 1; i <= Math.Min(word.Length, 24); i++) if (seen.Add(word[..i])) yield return word[..i];
-            if (word.Length > 24 && seen.Add(word)) yield return word;
+            for (int i = 1; i <= Math.Min(word.Length, 24); i++) if (seen.Add(word[..i])) { yield return word[..i]; if (seen.Count >= 16384) yield break; }
+            if (word.Length > 24 && seen.Add(word)) { yield return word; if (seen.Count >= 16384) yield break; }
         }
     }
+    private static string IndexableText(ClipPayload payload) => string.Join(' ', payload.Name, payload.Source, string.Join(' ', payload.Paths), payload.Text[..Math.Min(payload.Text.Length, 262144)]);
     public Task<List<ClipRow>> QueryAsync(HistoryQuery query) => Work(() =>
     {
         var sql = new StringBuilder("SELECT id,kind,summary,bytes,created,updated,pinned FROM clips WHERE 1=1");
@@ -224,7 +232,7 @@ public sealed class HistoryStore : IDisposable
         update.Transaction = tx; update.ExecuteNonQuery();
         using var insert = Command("INSERT OR IGNORE INTO tokens(token,clip_id) VALUES($token,$id)", ("$token", Array.Empty<byte>()), ("$id", id));
         insert.Transaction = tx; insert.Prepare();
-        foreach (var token in IndexTokens(payload.SearchText)) { insert.Parameters["$token"].Value = Hash(token); insert.ExecuteNonQuery(); }
+        foreach (var token in IndexTokens(IndexableText(payload))) { insert.Parameters["$token"].Value = Hash(token); insert.ExecuteNonQuery(); }
         tx.Commit(); return summary;
     }
     public Task SetPinAsync(long id, bool pin) => Work(() => { using var c = Command("UPDATE clips SET pinned=$pin WHERE id=$id", ("$pin", pin ? 1 : 0), ("$id", id)); c.ExecuteNonQuery(); Prune(); return true; });
