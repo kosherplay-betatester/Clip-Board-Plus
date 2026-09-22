@@ -59,7 +59,7 @@ public partial class MainWindow : Window
         if (demo) SetStatus("Demo workspace · capture paused · sample clips only");
         else if (settings.WindowsHistoryManaged) { try { SetStatus(WindowsHistorySettings.Apply(settings)); } catch (Exception e) { SetStatus("Could not apply Windows history preference: " + e.Message); } }
         loaded.TrySetResult();
-        _ = Safe(async () => { while (!exiting && await store.RepairTextBatchAsync()) await Task.Delay(50); if (!exiting) MarkHistoryChanged(); });
+        _ = Safe(async () => { while (!exiting && await store.RepairTextBatchAsync()) await Task.Delay(50); if (!exiting && SearchBox.Text.Length > 0) MarkHistoryChanged(); });
     }
     private void CreateTray()
     {

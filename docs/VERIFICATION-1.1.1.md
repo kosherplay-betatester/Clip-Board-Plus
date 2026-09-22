@@ -12,6 +12,8 @@ Tested on Windows 11 with .NET SDK 10.0.303 on 2026-09-22. The findings below di
 - Twenty-four selected/clicked Paste requests with a stale queue present. Each published exactly the requested text. This exercises the complete selection/payload/copy fallback path without asserting destination input delivery.
 - Visible rows remain stable after a new capture; selection survives refresh; an older search cannot overwrite a newer pending search.
 - Local WAV/MP3/H.264 playback, pause/seek/stop/release, distinct-image preview routing, mixed text/file/image copy, missing-file rejection, file references, storage budgets, search, pins and shortcut configuration regressions.
+- The self-contained package also passed all 94 checks. The installer probe passed nine checks covering install, upgrade, startup/shortcut/Apps registration, installed core tests, uninstall, and preservation of user files and production startup preferences.
+- Synthetic dark-theme history was rendered and visually inspected. A misleading new-capture notice after startup maintenance was removed.
 
 ## Performance sample
 

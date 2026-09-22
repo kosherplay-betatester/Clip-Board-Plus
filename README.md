@@ -149,8 +149,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [SECURITY.m
 Install Inno Setup 6 on the build machine (it is not an app dependency), then:
 
 ```powershell
-./scripts/Publish.ps1 -OutputRoot artifacts/releases/v1.1.0
+./scripts/Publish.ps1 -OutputRoot artifacts/releases/v1.1.1
 ./scripts/Build-Installer.ps1
 ```
 
-The installer and portable ZIP are written to `artifacts/releases/v1.1.0/`. Installer artwork lives under `installer/assets/`; regenerate it with the built app's `--write-installer-art installer/assets` command. `Build-Installer.ps1 -InstallerTest` creates an isolated test product with a separate App ID, shortcuts, and startup registry value; this test installer is never distributed.
+The installer and portable ZIP are written to `artifacts/releases/v1.1.1/`. Installer artwork lives under `installer/assets/`; regenerate it with the built app's `--write-installer-art installer/assets` command. `Build-Installer.ps1 -InstallerTest` creates an isolated test product with a separate App ID, shortcuts, and startup registry value; this test installer is never distributed.
