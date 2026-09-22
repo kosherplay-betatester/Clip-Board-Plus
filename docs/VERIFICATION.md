@@ -1,6 +1,6 @@
 # Verification record — 1.1.0
 
-For the current code-handling update, see [1.1.2 verification](VERIFICATION-1.1.2.md) and the [1.1.1 reliability verification](VERIFICATION-1.1.1.md). Results below are historical.
+For the current Actions-menu fix, see [1.1.3 verification](VERIFICATION-1.1.3.md). The [1.1.2 code-handling](VERIFICATION-1.1.2.md) and [1.1.1 reliability](VERIFICATION-1.1.1.md) records cover earlier changes. Results below are historical.
 
 Tested locally on Windows 11 build 26200 with .NET SDK 10.0.303. Results are measurements on this machine, not guarantees for every PC, app, or media codec.
 

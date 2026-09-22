@@ -315,13 +315,30 @@ public partial class MainWindow : Window
         await Safe(async () => { await OpenPreviewAsync(row); });
     }
     private void Actions_Click(object sender, RoutedEventArgs e)
+        => OpenActionsMenu((Button)sender);
+    private ContextMenu OpenActionsMenu(Button button)
     {
-        var menu = new ContextMenu();
-        void Add(string title, Func<Task> action) { var item = new MenuItem { Header = title }; item.Click += async (_, _) => await Safe(action); menu.Items.Add(item); }
-        Add("Paste exact text (no formatting)    Ctrl+Enter", () => PasteAsync(true));
+        var menu = BuildActionsMenu();
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var work = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).WorkingArea;
+        menu.MaxHeight = Math.Max(120, Math.Min(560, work.Height / dpi.DpiScaleY - 24));
+        menu.MaxWidth = Math.Max(120, Math.Min(480, work.Width / dpi.DpiScaleX - 24));
+        menu.MinWidth = Math.Min(320, menu.MaxWidth);
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+        menu.VerticalOffset = -6;
+        menu.IsOpen = true;
+        return menu;
+    }
+    private ContextMenu BuildActionsMenu()
+    {
+        var menu = new ContextMenu { Style = (Style)FindResource("ActionsMenuStyle"), ItemContainerStyle = (Style)FindResource("ActionMenuItemStyle") };
+        void Add(string title, Func<Task> action, string shortcut = "") { var item = new MenuItem { Header = title, InputGestureText = shortcut }; item.Click += async (_, _) => await Safe(action); menu.Items.Add(item); }
+        void Separate() => menu.Items.Add(new Separator { Style = (Style)FindResource("ActionSeparatorStyle") });
+        Add("Paste exact text (no formatting)", () => PasteAsync(true), "Ctrl+Enter");
         Add("Copy exact text (no formatting)", () => PasteAsync(true, true));
-        Add("Preview    Space", () => { Preview_Click(this, new()); return Task.CompletedTask; });
-        menu.Items.Add(new Separator());
+        Add("Preview", () => { Preview_Click(this, new()); return Task.CompletedTask; }, "Space");
+        Separate();
         Add("Queue selected clips (list order)", () => { foreach (var row in rows.Where(r => ClipList.SelectedItems.Contains(r))) pasteQueue.Enqueue(row.Id); UpdateQueue(); SetStatus($"{pasteQueue.Count} clips in the paste queue."); return Task.CompletedTask; });
         Add("Clear paste queue", () => { pasteQueue.Clear(); UpdateQueue(); return Task.CompletedTask; });
         Add("Copy selected text only (caption)", async () =>
@@ -340,15 +357,15 @@ public partial class MainWindow : Window
             if (payload.Text.Length == 0) throw new InvalidOperationException("Select text, links, or file paths to combine.");
             await store.AddAsync(payload); await clipboard.PutAsync(payload); SetStatus("Combined text copied and saved."); await RefreshAsync();
         });
-        menu.Items.Add(new Separator());
+        Separate();
         Add("Edit as a new snippet", async () => { if (await SelectedPayloadAsync() is { } p) await EditSnippetAsync(p.Text); });
         Add("Copy trimmed text", () => TransformAsync(s => s.Trim()));
         Add("Copy UPPERCASE", () => TransformAsync(s => s.ToUpperInvariant()));
         Add("Copy lowercase", () => TransformAsync(s => s.ToLowerInvariant()));
         Add("Copy file paths", () => PasteAsync(true, true));
-        menu.Items.Add(new Separator());
-        Add("Delete selected clips    Delete", DeleteSelectedAsync);
-        menu.PlacementTarget = (Button)sender; menu.IsOpen = true;
+        Separate();
+        Add("Delete selected clips", DeleteSelectedAsync, "Delete");
+        return menu;
     }
     private async Task TransformAsync(Func<string, string> transform)
     {
@@ -410,6 +427,7 @@ public partial class MainWindow : Window
         Directory.CreateDirectory(directory);
         await Task.Delay(250); UpdateLayout();
         RenderWindow(this, Path.Combine(directory, "history-dark.png"));
+        await RenderActionsMenuAsync(directory, "dark");
         if (mediaFixtureRoot is not null)
         {
             foreach (string name in new[] { "preview.mp3", "preview.mp4" }) await store.AddAsync(new() { Kind = ClipKind.Files, Paths = [Path.GetFullPath(Path.Combine(mediaFixtureRoot, name))], Source = "Explorer" });
@@ -425,9 +443,36 @@ public partial class MainWindow : Window
         var options = new SettingsWindow(settings, store, _ => Task.CompletedTask) { Owner = this };
         options.Show(); await Task.Delay(250); options.UpdateLayout(); RenderWindow(options, Path.Combine(directory, "settings.png")); options.Close();
         App.ApplyTheme("Light"); await Task.Delay(100); UpdateLayout(); RenderWindow(this, Path.Combine(directory, "history-light.png"));
+        await RenderActionsMenuAsync(directory, "light");
         var text = await PreviewWindow.ExtractTextAsync(payload.Image!);
         await File.WriteAllTextAsync(Path.Combine(directory, "ocr-result.txt"), text);
         Exit();
+    }
+    private async Task RenderActionsMenuAsync(string directory, string theme)
+    {
+        var menu = OpenActionsMenu(ActionsButton);
+        try
+        {
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            menu.UpdateLayout();
+            if (menu.ActualWidth <= 0 || menu.ActualHeight <= 0) throw new InvalidOperationException("Actions menu did not lay out.");
+            void Render(string suffix, double scale)
+            {
+                var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)Math.Ceiling(menu.ActualWidth * scale), (int)Math.Ceiling(menu.ActualHeight * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+                bitmap.Render(menu);
+                var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder(); encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+                using var file = File.Create(Path.Combine(directory, $"actions-{theme}-{suffix}.png")); encoder.Save(file);
+            }
+            foreach (double scale in new[] { 1d, 1.75, 2d }) Render(((int)(scale * 100)).ToString(), scale);
+            menu.MaxHeight = 220; menu.UpdateLayout();
+            var scroll = (ScrollViewer)menu.Template.FindName("MenuScroll", menu);
+            if (scroll.ScrollableHeight <= 0) throw new InvalidOperationException("A constrained Actions menu must scroll.");
+            Render("compact-top", 1.75);
+            scroll.ScrollToEnd(); await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle); menu.UpdateLayout();
+            if (scroll.VerticalOffset <= 0) throw new InvalidOperationException("Lower menu actions could not be reached.");
+            Render("compact-bottom", 1.75);
+        }
+        finally { menu.IsOpen = false; }
     }
     private static void RenderWindow(Window window, string path)
     {

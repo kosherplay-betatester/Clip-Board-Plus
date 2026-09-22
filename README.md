@@ -47,9 +47,9 @@ A native Windows clipboard history app built with .NET 10, WPF, Windows clipboar
 
 [Browse every release and its notes](https://github.com/kosherplay-betatester/Clip-Board-Plus/releases). Requires Windows 10 version 2004 or later / Windows 11, x64.
 
-Download **ClipboardPlus-Setup-1.1.2-win-x64.exe** from GitHub Releases and follow the setup wizard. It installs for your Windows account without administrator privileges and offers a desktop shortcut, optional startup at sign-in, and launch on completion. Updates reuse the same installation; your separate clipboard history is preserved. Uninstall through Windows Apps.
+Download **ClipboardPlus-Setup-1.1.3-win-x64.exe** from GitHub Releases and follow the setup wizard. It installs for your Windows account without administrator privileges and offers a desktop shortcut, optional startup at sign-in, and launch on completion. Updates reuse the same installation; your separate clipboard history is preserved. Uninstall through Windows Apps.
 
-**1.1.2 adds exact code handling to the reliability fixes.** It repairs existing blank text previews, recovers text from HTML/RTF-only copies, keeps rows stable while you choose a clip, and separates queued paste from normal Paste/Enter. Use Settings → Check for updates or download the new installer. Setup asks before closing a running app and keeps it running if you decline. Silent setup will not close a running app automatically.
+**1.1.3 fixes the Actions menu display and includes the exact-code and reliability improvements.** It repairs existing blank text previews, recovers text from HTML/RTF-only copies, keeps rows stable while you choose a clip, and separates queued paste from normal Paste/Enter. Use Settings → Check for updates or download the new installer. Setup asks before closing a running app and keeps it running if you decline. Silent setup will not close a running app automatically.
 
 Prefer portable? Extract **ClipboardPlus-win-x64.zip** into a permanent folder and run **ClipboardPlus.exe**. Both downloads include .NET and work offline after download.
 
@@ -158,8 +158,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [SECURITY.m
 Install Inno Setup 6 on the build machine (it is not an app dependency), then:
 
 ```powershell
-./scripts/Publish.ps1 -OutputRoot artifacts/releases/v1.1.2
+./scripts/Publish.ps1 -OutputRoot artifacts/releases/v1.1.3
 ./scripts/Build-Installer.ps1
 ```
 
-The installer and portable ZIP are written to `artifacts/releases/v1.1.2/`. Installer artwork lives under `installer/assets/`; regenerate it with the built app's `--write-installer-art installer/assets` command. `Build-Installer.ps1 -InstallerTest` creates an isolated test product with a separate App ID, shortcuts, and startup registry value; this test installer is never distributed.
+The installer and portable ZIP are written to `artifacts/releases/v1.1.3/`. Installer artwork lives under `installer/assets/`; regenerate it with the built app's `--write-installer-art installer/assets` command. `Build-Installer.ps1 -InstallerTest` creates an isolated test product with a separate App ID, shortcuts, and startup registry value; this test installer is never distributed.

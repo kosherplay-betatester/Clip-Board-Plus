@@ -11,8 +11,46 @@
     <SolidColorBrush x:Key="AccentTextBrush" Color="#11281C"/>
     <Style TargetType="Window"><Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="13"/></Style>
     <Style TargetType="TextBlock"/>
-    <Style TargetType="ContextMenu"><Setter Property="Background" Value="{DynamicResource CardBrush}"/><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/><Setter Property="Padding" Value="5"/></Style>
-    <Style TargetType="MenuItem"><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="Padding" Value="12,8"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem"><Border x:Name="Item" Padding="{TemplateBinding Padding}" Background="Transparent" CornerRadius="4"><ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/></Border><ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Item" Property="Background" Value="{DynamicResource HoverBrush}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Item" Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+    <!-- The frame and rows share one layout. The stock ContextMenu template paints an icon
+         gutter which otherwise overlaps custom rows, especially at high display scaling. -->
+    <Style x:Key="ActionsMenuStyle" TargetType="ContextMenu">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="6"/>
+      <Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="13"/>
+      <Setter Property="UseLayoutRounding" Value="True"/><Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="FlowDirection" Value="LeftToRight"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ContextMenu">
+        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+          <Grid Grid.IsSharedSizeScope="True">
+            <ScrollViewer x:Name="MenuScroll" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False" Focusable="False">
+              <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+            </ScrollViewer>
+          </Grid>
+        </Border>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="ActionMenuItemStyle" TargetType="MenuItem">
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="Padding" Value="12,8"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem">
+        <Border x:Name="Item" Padding="{TemplateBinding Padding}" Background="Transparent" CornerRadius="4">
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto" SharedSizeGroup="Gesture"/></Grid.ColumnDefinitions>
+            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+            <TextBlock x:Name="Gesture" Grid.Column="1" Text="{TemplateBinding InputGestureText}" Margin="24,0,0,0" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+          </Grid>
+        </Border>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Item" Property="Background" Value="{DynamicResource HoverBrush}"/></Trigger>
+          <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Item" Property="Opacity" Value="0.45"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="ActionSeparatorStyle" TargetType="Separator">
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Separator"><Border Height="1" Margin="12,5" Background="{DynamicResource BorderBrush}"/></ControlTemplate></Setter.Value></Setter>
+    </Style>
     <Style TargetType="Button">
       <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="Background" Value="{DynamicResource CardBrush}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/><Setter Property="BorderThickness" Value="1"/>

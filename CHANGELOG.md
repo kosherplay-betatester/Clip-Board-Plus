@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.3 — 2026-09-22
+
+- Fix the Actions menu's white icon gutter overlapping command labels. Its frame, rows, separators and scroll area now use one consistent template.
+- Put shortcut labels in a separate aligned column, with matching dark/light colors and readable hover/disabled states.
+- Anchor the menu above the Actions button and constrain its size to the current monitor's usable area, accounting for display scaling. Long menus scroll instead of hiding lower commands.
+- Scope custom flat-menu styles to Actions so standard text-box context menus retain their native behavior.
+- Rendered and inspected both themes at 100%, 175% and 200%, including a short popup scrolled to its final command. All 80 core regression checks passed.
+
 ## 1.1.2 — 2026-09-22
 
 - Explicit **Paste exact text** (Ctrl+Enter) and **Copy exact text** actions preserve source code without rich formatting, trimming, reindentation, newline conversion or escape expansion.
