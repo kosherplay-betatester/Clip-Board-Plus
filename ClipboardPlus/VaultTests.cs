@@ -15,6 +15,7 @@ internal static class VaultTests
         check(SensitiveText.Detect("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r") == "JWT token", "JWT is detected");
         check(SensitiveText.Detect("password: hunter2024") == "password" && SensitiveText.Detect("סיסמה: abc12345") == "password", "Labelled passwords are detected in English and Hebrew");
         check(SensitiveText.Detect("GB82WEST12345698765432") == "bank account (IBAN)" && SensitiveText.Detect("GB82WEST12345698765431") is null, "IBAN is detected only with a valid check digit");
+        check(SensitiveText.Detect("hjhSHNSH%GS$") == "possible password" && SensitiveText.Detect("hjJHu8$%&*nm3") == "possible password" && SensitiveText.Detect("Get-ChildItem") is null, "Password-like tokens are flagged with or without a digit; hyphenated command names are not");
         check(SensitiveText.Detect("Xk9#mP2$vL7@qR") == "possible password", "A single mixed-class token is flagged as a possible password");
         // ...and ordinary content that must not be.
         check(new[] { "Hello world, meeting at 5pm", "const x = Math.max(1, 2);", "https://example.com/a?b=c", "C:\\Users\\beta\\Documents\\file.txt", "v1.2.3-beta", "user@example.com", "שלום עולם, מה שלומך?", "Order #12345 shipped on 2026-10-28", "my_variable_name" }.All(t => SensitiveText.Detect(t) is null), "Everyday text, code, links, paths and emails are not flagged");
@@ -27,7 +28,7 @@ internal static class VaultTests
         bool tooShort = false; try { vault.Create("short", "short"); } catch (ArgumentException) { tooShort = true; }
         check(mismatch && tooShort && !vault.Exists, "A password must be typed twice identically and be at least 8 characters");
         string code = vault.Create("correct horse", "correct horse");
-        check(vault.Exists && vault.IsUnlocked && System.Text.RegularExpressions.Regex.IsMatch(code, @"^[A-Z2-9]{5}(-[A-Z2-9]{5}){3}$"), "Creating a password yields a recovery code in the expected format");
+        check(vault.Exists && !vault.IsUnlocked && System.Text.RegularExpressions.Regex.IsMatch(code, @"^[A-Z2-9]{5}(-[A-Z2-9]{5}){3}$"), "Creating a password yields a recovery code in the expected format");
         var secret = RandomNumberGenerator.GetBytes(500);
         var blob = vault.Encrypt(secret);
         vault.Lock();
@@ -54,6 +55,7 @@ internal static class VaultTests
             var row = rows.Single(r => r.Id == hidden);
             check(row.Summary.Locked && !row.Title.Contains("4111") && !row.Preview.Contains("4111") && !rows.Single(r => r.Id == plain).Summary.Locked, "Sensitive text is stored as a locked row whose title and preview reveal nothing");
             check((await store.QueryAsync(new("4111"))).Count == 0 && (await store.QueryAsync(new("9876"))).Count == 0 && (await store.QueryAsync(new("lunch"))).Count == 1, "Locked content is not searchable, ordinary content still is");
+            check(await MainWindow.VerifyLockedRowAsync(store, row, rows.Single(r => r.Id == plain)), "Locked rows show an inline password field (normal rows do not); a wrong password is refused and the vault stays locked");
             store.Vault.Lock();
             bool blocked = false; try { await store.GetAsync(hidden); } catch (LockedException) { blocked = true; }
             check(blocked && (await store.GetAsync(plain))!.Text == "Normal note about lunch", "A locked item cannot be read without the password; other items are unaffected");

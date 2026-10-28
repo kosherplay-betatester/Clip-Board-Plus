@@ -51,7 +51,7 @@ public sealed class Vault
         var secret = key.ExportPkcs8PrivateKey();
         var code = NewRecoveryCode();
         Write(new(Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()), Convert.ToBase64String(Wrap(secret, password)), Convert.ToBase64String(Wrap(secret, NormalizeCode(code)))));
-        Open(secret);
+        CryptographicOperations.ZeroMemory(secret); // the new vault starts locked: every use asks for the password
         return code;
     }
     public bool Unlock(string password)

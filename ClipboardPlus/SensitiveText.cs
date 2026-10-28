@@ -59,6 +59,9 @@ internal static class SensitiveText
     private static bool LooksLikePassword(string s)
     {
         if (s.Length is < 10 or > 64 || s.Any(char.IsWhiteSpace) || s.Contains("://") || s.Contains('\\') || s.Contains('@') && s.Contains('.')) return false;
-        return s.Any(char.IsUpper) && s.Any(char.IsLower) && s.Any(char.IsDigit) && s.Any(c => !char.IsLetterOrDigit(c));
+        bool upper = s.Any(char.IsUpper), lower = s.Any(char.IsLower), digit = s.Any(char.IsDigit);
+        bool anySymbol = s.Any(c => !char.IsLetterOrDigit(c)), strongSymbol = s.Any(c => !char.IsLetterOrDigit(c) && c is not ('-' or '_' or '.'));
+        // Upper + lower + a real symbol (not just - _ .) is password-like even without a digit; otherwise all four classes are required.
+        return upper && lower && (strongSymbol || digit && anySymbol);
     }
 }

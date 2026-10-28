@@ -57,7 +57,15 @@ internal static class VaultDialogs
         dialog.Body.Children.Add(Dialog.Muted("Store it somewhere important and safe: a password manager, or printed and kept with your private documents. Do not leave it in the clipboard history or an unprotected note."));
         var saved = new CheckBox { Content = "I saved my recovery code in a safe place", Margin = new(0, 14, 0, 0) }; dialog.Body.Children.Add(saved);
         var row = dialog.Row(); Button? done = null;
-        dialog.Add(row, "Copy code", () => { System.Windows.Clipboard.SetText(code); dialog.Error.Text = "Copied. Paste it into your safe place now — then remove it from the clipboard history."; });
+        dialog.Add(row, "Copy code", () =>
+        {
+            var data = new DataObject(); data.SetText(code);
+            data.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream(BitConverter.GetBytes(1)), false);
+            data.SetData("CanIncludeInClipboardHistory", new MemoryStream(BitConverter.GetBytes(0)), false);
+            data.SetData("ClipboardPlus.Internal", new MemoryStream(Guid.NewGuid().ToByteArray()), false);
+            System.Windows.Clipboard.SetDataObject(data, true);
+            dialog.Error.Text = "Copied (kept out of the clipboard history). Paste it into your safe place now.";
+        });
         done = dialog.Add(row, "Done", () => dialog.DialogResult = true, true); done.IsEnabled = false;
         saved.Checked += (_, _) => done.IsEnabled = true; saved.Unchecked += (_, _) => done.IsEnabled = false;
         dialog.Closing += (_, e) => { if (dialog.DialogResult != true) { e.Cancel = true; dialog.Error.Text = "Confirm that you saved the recovery code first."; } };

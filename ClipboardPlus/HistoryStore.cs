@@ -115,7 +115,7 @@ public sealed class HistoryStore : IDisposable
             RETURNING id;
             """, ("$hash", fingerprint), ("$kind", (int)payload.Kind),
             ("$summary", Protect(JsonSerializer.SerializeToUtf8Bytes(locked
-                ? new ClipSummary("Sensitive item · " + sensitive, "Locked with your password. Unlock to view, preview or paste.", payload.Source, null, null, true, 1, null, true)
+                ? new ClipSummary("Sensitive item · " + sensitive, "Locked. Type the password below to copy or paste.", payload.Source, null, null, true, 1, null, true)
                 : new ClipSummary(payload.Title, payload.Preview, payload.Source, MakeThumbnail(payload.Image), MediaSourceInfo.From(payload), true, 1, payload.CaptureNote)))),
             ("$payload", Protect(locked ? [.. "CPLK"u8, .. Vault.Encrypt(bytes)] : bytes)), ("$locked", locked ? 1 : 0), ("$bytes", bytes.LongLength), ("$now", now), ("$pin", pin ? 1 : 0), ("$rename", rename ? 1 : 0));
         cmd.Transaction = tx;

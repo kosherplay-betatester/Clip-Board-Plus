@@ -38,7 +38,7 @@ public partial class MainWindow : Window
     {
         this.store = store; this.settings = settings; this.demo = demo;
         InitializeComponent();
-        ClipList.ItemsSource = rows;
+        ClipList.ItemsSource = rows; LockedRowEditor.Submit = UnlockAndUseAsync;
         searchTimer.Tick += async (_, _) => { searchTimer.Stop(); await Safe(RefreshAsync); };
         maintenance.Tick += async (_, _) => await Safe(async () => { await store.MaintainAsync(); MarkHistoryChanged(); });
         Loaded += async (_, _) => { await InitializeAsync(); if (IsVisible) SearchBox.Focus(); };
@@ -136,13 +136,59 @@ public partial class MainWindow : Window
     private void FinishClipboardAction()
     {
         clipboardAction = false;
+        if (relockAfterAction) { relockAfterAction = false; store.Vault.Lock(); }
         if (pendingPanel is { } nextPanel) { pendingPanel = null; ShowPanel(nextPanel); }
     }
     private async Task Safe(Func<Task> action)
     {
         try { await action(); } catch (Exception e) { SetStatus(e.Message); }
     }
-    private void MarkHistoryChanged() { if (!exiting) RefreshButton.Visibility = Visibility.Visible; }
+    // New captures appear on their own unless that would move rows under your pointer or interrupt typing a password;
+    // in that case the "New clips" button waits for you.
+    private void MarkHistoryChanged()
+    {
+        if (exiting) return;
+        if (IsVisible && offset == 0 && !ClipList.IsMouseOver && Mouse.LeftButton != MouseButtonState.Pressed && !InLockedEditor()) { ScheduleRefresh(); return; }
+        RefreshButton.Visibility = Visibility.Visible;
+    }
+    private static T? FindDescendant<T>(DependencyObject? root) where T : DependencyObject
+    {
+        if (root is null) return null;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match) return match;
+            if (FindDescendant<T>(child) is { } deeper) return deeper;
+        }
+        return null;
+    }
+    private static bool InLockedEditor()
+    {
+        for (var d = Keyboard.FocusedElement as DependencyObject; d is not null; d = d is Visual ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+            if (d is LockedRowEditor) return true;
+        return false;
+    }
+    private void FocusLockedEditor(ClipRow row)
+    {
+        ClipList.UpdateLayout();
+        if (ClipList.ItemContainerGenerator.ContainerFromItem(row) is DependencyObject container && FindDescendant<LockedRowEditor>(container) is { } editor)
+        {
+            editor.FocusPassword(); SetStatus("Locked item: type its password in the row, then press Enter to paste.");
+        }
+    }
+    // Typed password -> unlock just long enough to copy/paste this one item, then lock again.
+    private async Task<bool> UnlockAndUseAsync(ClipRow row, string password, bool paste)
+    {
+        if (!await Task.Run(() => store.Vault.Unlock(password))) { await Task.Delay(800); SetStatus("Incorrect password."); return false; }
+        try
+        {
+            var payload = await store.GetAsync(row.Id);
+            if (payload is null) { SetStatus("This clip is no longer in history."); return true; }
+            await PasteAsync(copyOnly: !paste, supplied: payload);
+        }
+        finally { store.Vault.Lock(); }
+        return true;
+    }
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await Safe(RefreshAsync);
     private void ScheduleRefresh() { ++refreshVersion; queryPending = true; searchTimer.Stop(); searchTimer.Start(); }
     private DateTimeOffset? Since => DateFilter.SelectedIndex switch { 1 => new DateTimeOffset(DateTime.Today), 2 => DateTimeOffset.Now.AddDays(-7), 3 => DateTimeOffset.Now.AddDays(-30), _ => null };
@@ -209,12 +255,14 @@ public partial class MainWindow : Window
         if (((Button)sender).Tag is ClipRow row) await Safe(async () => { await store.SetPinAsync(row.Id, !row.Pinned); await RefreshAsync(); });
     }
     // Locked (sensitive) items ask for the password; a refusal stops the whole action with a clear message.
+    private bool relockAfterAction;
     private async Task<ClipPayload?> LoadAsync(long id)
     {
         try { return await store.GetAsync(id); }
         catch (LockedException)
         {
             if (!VaultDialogs.Unlock(this, store.Vault, store)) throw new LockedException();
+            relockAfterAction = true;
             return await store.GetAsync(id);
         }
     }
@@ -340,7 +388,7 @@ public partial class MainWindow : Window
     {
         while (d is not null)
         {
-            if (d is System.Windows.Controls.Primitives.ButtonBase or Slider or MediaControls) return null;
+            if (d is System.Windows.Controls.Primitives.ButtonBase or Slider or MediaControls or LockedRowEditor) return null;
             if (d is ListBoxItem item) return item.DataContext as ClipRow;
             d = d is Visual ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
         }
@@ -356,6 +404,7 @@ public partial class MainWindow : Window
         var clicked = HitRow(e.OriginalSource as DependencyObject);
         if (clicked is null) return;
         e.Handled = true;
+        if (clicked.Summary.Locked) { FocusLockedEditor(clicked); return; }
         if (pressedRowId is { } pressed && Environment.TickCount64 - lastRowPress <= Native.GetDoubleClickTime() && pressed != clicked.Id) { SetStatus("Selection changed between clicks. Choose the item again."); return; }
         await Safe(() => PasteAsync(clickedId: clicked.Id));
     }
@@ -473,6 +522,8 @@ public partial class MainWindow : Window
     });
     private async void Window_KeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key != Key.Escape && InLockedEditor()) return; // typing a password: no list shortcuts
+        if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None && ClipList.IsKeyboardFocusWithin && ClipList.SelectedItem is ClipRow { Summary.Locked: true } lockedRow) { e.Handled = true; FocusLockedEditor(lockedRow); return; }
         if (e.Key == Key.Escape) { Hide(); e.Handled = true; }
         else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) { SearchBox.Focus(); SearchBox.SelectAll(); e.Handled = true; }
         else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control && ClipList.IsKeyboardFocusWithin) { e.Handled = true; await Safe(CopySelectionAsync); }
@@ -696,6 +747,23 @@ public partial class MainWindow : Window
             await window.PasteAsync();
             var expected = string.Join(Environment.NewLine, window.rows.Where(r => ids.Contains(r.Id)).Select(r => r.Id == ids[0] ? a : b));
             return System.Windows.Clipboard.GetText() == expected;
+        }
+        finally { window.Cleanup(); window.Close(); }
+    }
+    internal static async Task<bool> VerifyLockedRowAsync(HistoryStore store, ClipRow locked, ClipRow normal)
+    {
+        var window = new MainWindow(store, new() { Hotkey = "Ctrl+Alt+F9", SensitiveMode = "Lock" }, true) { ShowActivated = false };
+        try
+        {
+            await window.InitializeAsync(); window.Show(); window.UpdateLayout();
+            await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle); window.UpdateLayout();
+            LockedRowEditor? Editor(ClipRow row) => window.ClipList.ItemContainerGenerator.ContainerFromItem(window.rows.Single(r => r.Id == row.Id)) is DependencyObject c ? FindDescendant<LockedRowEditor>(c) : null;
+            var lockedEditor = Editor(locked); var normalEditor = Editor(normal);
+            if (lockedEditor is null || normalEditor is null || !lockedEditor.IsVisible || normalEditor.IsVisible) return false;
+            if (Environment.GetEnvironmentVariable("CP_RENDER_LOCKED") is { Length: > 0 } renderPath) RenderWindow(window, renderPath);
+            // A wrong password is refused, wipes nothing else, and leaves the vault locked.
+            bool wrong = await window.UnlockAndUseAsync(window.rows.Single(r => r.Id == locked.Id), "definitely wrong", true);
+            return !wrong && !store.Vault.IsUnlocked;
         }
         finally { window.Cleanup(); window.Close(); }
     }
