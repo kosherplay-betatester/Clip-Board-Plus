@@ -119,7 +119,7 @@ public sealed class ClipboardService : IDisposable
                 return new() { Kind = ClipKind.Image, Image = ImageFidelity.NormalizePng(bytes), Source = owner, Name = $"Image · {frame.PixelWidth} × {frame.PixelHeight}" };
             }
         }
-        if ((data.GetDataPresent(DataFormats.Bitmap) || data.GetDataPresent(DataFormats.Dib)) && ReadBitmap(data) is { } bitmap)
+        if ((data.GetDataPresent(DataFormats.Bitmap) || data.GetDataPresent(DataFormats.Dib)) && ReadBitmap(data, limit) is { } bitmap)
         {
             if ((long)bitmap.PixelWidth * bitmap.PixelHeight * 4 > limit * 4) throw new InvalidOperationException("Image dimensions exceed the capture memory limit.");
             var png = ImageFidelity.Encode(ImageFidelity.Normalize(bitmap, out _));
@@ -142,15 +142,18 @@ public sealed class ClipboardService : IDisposable
         var isLink = Uri.TryCreate(text.Trim(), UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http";
         return ClipText.Normalize(new() { Kind = isLink ? ClipKind.Link : ClipKind.Text, Text = text, Html = html, Rtf = rtf, Source = owner, CaptureNote = note });
     }
-    private static BitmapSource? ReadBitmap(System.Windows.IDataObject data)
+    private static BitmapSource? ReadBitmap(System.Windows.IDataObject data, long limit)
     {
         if (data.GetDataPresent(DataFormats.Bitmap) && data.GetData(DataFormats.Bitmap) is BitmapSource direct) return direct;
-        return data.GetDataPresent(DataFormats.Dib) && data.GetData(DataFormats.Dib) is MemoryStream dib ? DibToBitmap(dib.ToArray()) : null;
+        return data.GetDataPresent(DataFormats.Dib) && data.GetData(DataFormats.Dib) is MemoryStream dib ? DibToBitmap(dib.ToArray(), limit) : null;
     }
     // CF_DIB is a BITMAPINFOHEADER-prefixed device-independent bitmap; wrap it as a BMP file to decode it.
-    internal static BitmapSource? DibToBitmap(byte[] dib)
+    internal static BitmapSource? DibToBitmap(byte[] dib, long limit = long.MaxValue)
     {
         if (dib.Length < 40) return null;
+        // Check the declared size from the header before decoding, so a tiny DIB cannot demand a huge bitmap.
+        long declaredWidth = Math.Abs((long)BitConverter.ToInt32(dib, 4)), declaredHeight = Math.Abs((long)BitConverter.ToInt32(dib, 8));
+        if (declaredWidth == 0 || declaredHeight == 0 || declaredWidth * declaredHeight > limit) throw new InvalidOperationException("Image dimensions exceed the capture memory limit.");
         int header = BitConverter.ToInt32(dib, 0), bits = BitConverter.ToInt16(dib, 14), compression = BitConverter.ToInt32(dib, 16), colors = BitConverter.ToInt32(dib, 32);
         int masks = header == 40 && compression == 3 ? 12 : 0;
         int palette = bits <= 8 ? (colors == 0 ? 1 << bits : colors) * 4 : 0;

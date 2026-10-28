@@ -44,6 +44,9 @@ internal static class ImageTests
         bottomRow.CopyTo(dib, 40); topRow.CopyTo(dib, 48);
         var fromDib = ClipboardService.DibToBitmap(dib)!; var dibPixels = new byte[16]; new FormatConvertedBitmap(fromDib, PixelFormats.Bgra32, null, 0).CopyPixels(dibPixels, 8, 0);
         check(dibPixels[0] == 70 && dibPixels[1] == 80 && dibPixels[2] == 90 && dibPixels[12] == 40 && dibPixels[13] == 50 && dibPixels[14] == 60, "24-bit CF_DIB decodes with correct row direction and channel order");
+        bool bombRejected = false; var bomb = new byte[44]; BitConverter.GetBytes(40).CopyTo(bomb, 0); BitConverter.GetBytes(60000).CopyTo(bomb, 4); BitConverter.GetBytes(60000).CopyTo(bomb, 8); BitConverter.GetBytes((short)1).CopyTo(bomb, 12); BitConverter.GetBytes((short)32).CopyTo(bomb, 14);
+        try { ClipboardService.DibToBitmap(bomb, 1048576); } catch (InvalidOperationException) { bombRejected = true; }
+        check(bombRejected, "A tiny DIB declaring enormous dimensions is rejected before any decoding");
         var dib32 = new byte[40 + 8];
         BitConverter.GetBytes(40).CopyTo(dib32, 0); BitConverter.GetBytes(2).CopyTo(dib32, 4); BitConverter.GetBytes(1).CopyTo(dib32, 8); BitConverter.GetBytes((short)1).CopyTo(dib32, 12); BitConverter.GetBytes((short)32).CopyTo(dib32, 14);
         new byte[] { 1, 2, 3, 0, 4, 5, 6, 0 }.CopyTo(dib32, 40);
