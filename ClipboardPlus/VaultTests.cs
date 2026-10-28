@@ -75,6 +75,8 @@ internal static class VaultTests
             check(await off.AddAsync(new() { Text = "AKIAIOSFODNN7EXAMPLE" }) != 0, "With protection off nothing changes");
         Vault.Iterations = 310_000;
 
+        var informational = System.Reflection.Assembly.GetExecutingAssembly().GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).Cast<System.Reflection.AssemblyInformationalVersionAttribute>().Single().InformationalVersion.Split('+')[0];
+        check(Version.Parse(informational) == UpdateChecker.CurrentVersion, "The version the app reports (Settings, update check) equals the version stamped on the build");
         // Updates: release parsing, quiet-until-next-version, and verified downloads.
         const string release = """{"tag_name":"v9.9.9","body":"Notes","assets":[{"name":"SHA256SUMS.txt","browser_download_url":"https://github.com/x/y/releases/download/v9.9.9/SHA256SUMS.txt"},{"name":"ClipboardPlus-Setup-9.9.9-win-x64.exe","browser_download_url":"https://github.com/x/y/releases/download/v9.9.9/ClipboardPlus-Setup-9.9.9-win-x64.exe"},{"name":"ClipboardPlus-win-x64.zip","browser_download_url":"https://github.com/x/y/a.zip"}]}""";
         var info = UpdateChecker.ParseRelease(release);
