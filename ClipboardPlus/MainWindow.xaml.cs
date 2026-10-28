@@ -184,7 +184,12 @@ public partial class MainWindow : Window
         {
             var payload = await store.GetAsync(row.Id);
             if (payload is null) { SetStatus("This clip is no longer in history."); return true; }
+            StatusLabel.Text = "";
+            // Same path as any history item: pastes into the app you came from when possible, otherwise copies.
             await PasteAsync(copyOnly: !paste, supplied: payload);
+            string outcome = StatusLabel.Text;
+            if (outcome.StartsWith("Paste sent", StringComparison.Ordinal)) Toast.Show("Sensitive text pasted");
+            else if (outcome.StartsWith("Copied", StringComparison.Ordinal)) Toast.Show("Sensitive text copied to the clipboard");
         }
         finally { store.Vault.Lock(); }
         return true;
