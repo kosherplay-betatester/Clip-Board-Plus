@@ -48,6 +48,7 @@ public partial class MainWindow : Window
     private async Task InitializeCoreAsync()
     {
         initialized = true;
+        Height = Math.Min(Height, Math.Max(MinHeight, SystemParameters.WorkArea.Height - 16));
         var handle = new WindowInteropHelper(this).EnsureHandle();
         clipboard = new(settings, async payload => { await store.AddAsync(payload); _ = Dispatcher.BeginInvoke(MarkHistoryChanged); }, text => Dispatcher.BeginInvoke(() => { SetStatus(text); if (!IsVisible && tray is not null && (text.StartsWith("Clip not saved:", StringComparison.Ordinal) || text.StartsWith("Full text saved.", StringComparison.Ordinal))) tray.ShowBalloonTip(5000, "Clipboard Plus", text, System.Windows.Forms.ToolTipIcon.Info); }));
         clipboard.Paused = demo;
@@ -59,7 +60,7 @@ public partial class MainWindow : Window
         if (demo) SetStatus("Demo workspace · capture paused · sample clips only");
         else if (settings.WindowsHistoryManaged) { try { SetStatus(WindowsHistorySettings.Apply(settings)); } catch (Exception e) { SetStatus("Could not apply Windows history preference: " + e.Message); } }
         loaded.TrySetResult();
-        _ = Safe(async () => { while (!exiting && await store.RepairTextBatchAsync()) await Task.Delay(50); if (!exiting && SearchBox.Text.Length > 0) MarkHistoryChanged(); });
+        _ = Safe(async () => { while (!exiting && await store.RepairTextBatchAsync()) await Task.Delay(50); while (!exiting && await store.RepairImagesBatchAsync()) await Task.Delay(100); if (!exiting && SearchBox.Text.Length > 0) MarkHistoryChanged(); });
     }
     private void CreateTray()
     {
@@ -144,7 +145,7 @@ public partial class MainWindow : Window
             else
             {
                 int current = rows.IndexOf(existing); if (current != i) rows.Move(current, i);
-                if (existing.Updated != row.Updated || existing.Pinned != row.Pinned || existing.Title != row.Title || existing.Preview != row.Preview || existing.Summary.MediaSource != row.Summary.MediaSource) rows[i] = row;
+                if (existing.Updated != row.Updated || existing.Pinned != row.Pinned || existing.Title != row.Title || existing.Preview != row.Preview || existing.Summary.MediaSource != row.Summary.MediaSource || existing.Summary.Thumbnail?.Length != row.Summary.Thumbnail?.Length) rows[i] = row;
             }
         }
         foreach (var row in rows.Where(r => selected.Contains(r.Id))) if (!ClipList.SelectedItems.Contains(row)) ClipList.SelectedItems.Add(row);
@@ -200,31 +201,50 @@ public partial class MainWindow : Window
         {
         long? queueId = fromQueue && pasteQueue.TryPeek(out long next) ? next : null;
         if (fromQueue && queueId is null) return;
-        var payload = supplied ?? ((queueId ?? selectedId) is { } id ? await store.GetAsync(id) : null);
+        // Snapshot the whole selection (list order) before any await so refreshes cannot change what is pasted.
+        var selectionIds = fromQueue || supplied is not null || copyOnly ? [] : SnapshotSelection(clickedId);
+        IReadOnlyList<ClipPayload>? many = null;
+        ClipPayload? payload = null;
+        if (selectionIds.Length > 1)
+        {
+            var loaded = new List<ClipPayload>();
+            foreach (var itemId in selectionIds)
+            {
+                var item = await store.GetAsync(itemId);
+                if (item is null) { SetStatus("A selected clip was removed. Nothing was pasted; select the remaining items again."); await RefreshAsync(); return; }
+                loaded.Add(item);
+            }
+            many = loaded;
+            payload = plain ? new ClipPayload { Text = string.Join(Environment.NewLine, loaded.Select(p => p.Kind == ClipKind.Files ? string.Join(Environment.NewLine, p.Paths) : p.Text).Where(t => t.Length > 0)), Source = "Clipboard Plus" } : loaded[0];
+            if (plain) many = null;
+        }
+        else payload = supplied ?? ((queueId ?? selectedId) is { } id ? await store.GetAsync(id) : null);
         if (payload is null)
         {
             if (queueId is not null) { pasteQueue.Dequeue(); UpdateQueue(); SetStatus("A queued clip was removed. Continue with the next item."); }
             return;
         }
-        if (copyOnly) { await clipboard.PutAsync(payload, plain); SetStatus("Copied. Ready to paste anywhere."); return; }
+        Task PutNow() => many is null ? clipboard.PutAsync(payload, plain) : clipboard.PutManyAsync(many);
+        if (copyOnly) { await PutNow(); SetStatus("Copied. Ready to paste anywhere."); return; }
         var pasteTarget = destination.Window;
         if (!Native.ValidDestination(destination) || pasteTarget == new WindowInteropHelper(this).Handle)
         {
-            await clipboard.PutAsync(payload, plain);
+            await PutNow();
             SetStatus("Copied. Open Clipboard Plus from your destination app using the shortcut to paste directly."); return;
         }
         if (!Native.IsOurWindow(Native.GetForegroundWindow()))
         {
-            await clipboard.PutAsync(payload, plain);
+            await PutNow();
             PasteNotice("Copied. Focus changed while preparing the clip; use Ctrl+V where you want to paste."); return;
         }
         Hide();
         if (Native.GetForegroundWindow() != pasteTarget) Native.SetForegroundWindow(pasteTarget);
         for (int i = 0; i < 10 && Native.GetForegroundWindow() != pasteTarget; i++) await Task.Delay(10);
-        if (Native.GetForegroundWindow() != pasteTarget) { await clipboard.PutAsync(payload, plain); PasteNotice("Copied. Windows prevented focus switching; paste manually with Ctrl+V."); return; }
+        if (Native.GetForegroundWindow() != pasteTarget) { await PutNow(); PasteNotice("Copied. Windows prevented focus switching; paste manually with Ctrl+V."); return; }
         // Never synthesize Ctrl+V while the user still holds the shortcut's modifier keys.
         for (int i = 0; i < 40 && new[] { 0x01, 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(k => Native.GetAsyncKeyState(k) < 0); i++) await Task.Delay(25);
-        await clipboard.PublishForPasteAsync(payload, plain, async receipt =>
+        Task Deliver(Func<ClipboardReceipt, Task> deliver) => many is null ? clipboard.PublishForPasteAsync(payload, plain, deliver) : clipboard.PublishManyForPasteAsync(many, deliver);
+        await Deliver(async receipt =>
         {
             if (!await clipboard.IsCurrentAsync(receipt)) { PasteNotice("Another app changed the clipboard. Paste was cancelled; choose the clip again."); return; }
             if (!Native.RestoreDestinationFocus(destination) || Native.GetForegroundWindow() != pasteTarget || new[] { 0x01, 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(k => Native.GetAsyncKeyState(k) < 0) || Native.GetClipboardSequenceNumber() != receipt.Sequence || !Native.SendPaste())
@@ -237,6 +257,13 @@ public partial class MainWindow : Window
         });
         }
         finally { FinishClipboardAction(); }
+    }
+    // Selected row ids in current list order; a clicked row outside the selection is pasted alone.
+    private long[] SnapshotSelection(long? clickedId)
+    {
+        var selected = rows.Where(r => ClipList.SelectedItems.Contains(r)).Select(r => r.Id).ToArray();
+        if (clickedId is { } clicked && !selected.Contains(clicked)) return [clicked];
+        return selected.Length > 1 ? selected : [];
     }
     private void UpdateQueue()
     {
@@ -547,7 +574,7 @@ public partial class MainWindow : Window
                 window.ClipList.SelectedItem = window.rows.Single(r => r.Id == (i % 2 == 0 ? oldId : id));
                 // With no valid destination, the full Paste flow must still copy the right item.
                 await window.PasteAsync(clickedId: i % 2 == 0 ? id : null);
-                if (System.Windows.Clipboard.GetText() != expected || window.pasteQueue.Count != 1) return false;
+                if (System.Windows.Clipboard.GetText() != expected || window.pasteQueue.Count != 1) throw new InvalidOperationException($"routing round {i}: clipboard='{System.Windows.Clipboard.GetText()}' expected='{expected}' queue={window.pasteQueue.Count} status={window.StatusLabel.Text}");
             }
             // Search changes invalidate a query immediately, before its debounce fires.
             var pending = window.RefreshAsync(); window.SearchBox.Text = "not-in-any-fixture";
@@ -597,5 +624,43 @@ public partial class MainWindow : Window
             return first is not null && second is not null && !first.PreviewPayload.Image!.SequenceEqual(second.PreviewPayload.Image!) && second.PreviewPayload.Image!.SequenceEqual(expected!.Image!);
         }
         finally { first?.Close(); second?.Close(); window.Cleanup(); window.Close(); }
+    }
+    // Rows fully inside the list viewport at a given window height (DIPs). 100% ≈ 1040, 175% ≈ 594, 200% ≈ 520 on a 1080p display.
+    internal static async Task<int> VisibleRowsAtAsync(HistoryStore store, double windowHeight)
+    {
+        var window = new MainWindow(store, new() { Hotkey = "Ctrl+Alt+F9" }, true) { Height = windowHeight, ShowActivated = false };
+        try
+        {
+            await window.InitializeAsync(); window.Show(); window.UpdateLayout();
+            await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle); window.UpdateLayout();
+            int count = 0;
+            foreach (var row in window.rows)
+            {
+                if (window.ClipList.ItemContainerGenerator.ContainerFromItem(row) is not ListBoxItem item || !item.IsVisible) continue;
+                var top = item.TranslatePoint(new Point(0, 0), window.ClipList).Y;
+                if (top >= 0 && top + item.ActualHeight <= window.ClipList.ActualHeight + 0.5) count++;
+            }
+            LastLayout = $"window {window.ActualHeight:0}, list {window.ClipList.ActualHeight:0}, row {window.rows.Select(r => (window.ClipList.ItemContainerGenerator.ContainerFromItem(r) as ListBoxItem)?.ActualHeight ?? 0).FirstOrDefault():0.#}";
+            return count;
+        }
+        finally { window.Cleanup(); window.Close(); }
+    }
+    internal static string LastLayout = "";
+    internal static async Task<bool> VerifyMultiPasteAsync(HistoryStore store)
+    {
+        var window = new MainWindow(store, new() { Hotkey = "Ctrl+Alt+F9" }, true);
+        try
+        {
+            await window.InitializeAsync();
+            string a = "Multi A שלום", b = "Multi B 你好"; var ids = new[] { await store.AddAsync(new() { Text = a }), await store.AddAsync(new() { Text = b }) };
+            await window.RefreshAsync();
+            window.ClipList.SelectedItems.Clear();
+            foreach (var row in window.rows.Where(r => ids.Contains(r.Id))) window.ClipList.SelectedItems.Add(row);
+            // No Copy beforehand: Paste prepares every selected item, in list order, even without a paste destination.
+            await window.PasteAsync();
+            var expected = string.Join(Environment.NewLine, window.rows.Where(r => ids.Contains(r.Id)).Select(r => r.Id == ids[0] ? a : b));
+            return System.Windows.Clipboard.GetText() == expected;
+        }
+        finally { window.Cleanup(); window.Close(); }
     }
 }

@@ -57,17 +57,21 @@ public sealed class ClipboardService : IDisposable
     }
     private async Task CaptureAsync(uint sequence)
     {
-        if (Interlocked.Increment(ref pending) > 2)
+        if (Interlocked.Increment(ref pending) > 1)
         {
+            // Only the newest clipboard content can still be read; older sequences were already replaced.
             Interlocked.Decrement(ref pending);
-            if (queuedSequence == 0) status("Rapid copies queued. Intermediate changes may be skipped to keep memory bounded.");
-            queuedSequence = sequence; return;
+            Interlocked.Exchange(ref queuedSequence, sequence); return;
         }
         try
         {
-            for (int attempt = 0; attempt < 5; attempt++)
+            // ~2.5 s of bounded retries for a clipboard another app holds open or a save that hits a busy database.
+            const int attempts = 12;
+            for (int attempt = 0; attempt < attempts; attempt++)
             {
-                if (disposed || Paused || sequence != Native.GetClipboardSequenceNumber() || sequence == ignoredSequence || sequence == lastCaptured) return;
+                if (disposed || Paused || sequence == ignoredSequence || sequence == lastCaptured) return;
+                // A newer change has its own event; capturing it here would race with that event.
+                if (sequence != Native.GetClipboardSequenceNumber()) return;
                 try
                 {
                     var config = Volatile.Read(ref settings);
@@ -78,22 +82,22 @@ public sealed class ClipboardService : IDisposable
                     if (ReadFlag(data.GetData("CanIncludeInClipboardHistory")) == 0) return;
                     var payload = ReadPayload(data, owner, config.MaxItemMb * 1048576L);
                     if (sequence != Native.GetClipboardSequenceNumber()) return;
-                    lastCaptured = sequence;
-                    if (payload is not null) { await save(payload); if (payload.CaptureNote is not null) status(payload.CaptureNote); }
+                    if (payload is null) { lastCaptured = sequence; return; }
+                    await save(payload);
+                    lastCaptured = sequence; // Only a completed save counts as captured.
+                    if (payload.CaptureNote is not null) status(payload.CaptureNote);
                     return;
                 }
-                catch (ExternalException) when (attempt < 4) { await Task.Delay(20 * (attempt + 1)); }
+                catch (Exception e) when (attempt < attempts - 1 && (e is ExternalException || e is Microsoft.Data.Sqlite.SqliteException || e is IOException))
+                { await Task.Delay(Math.Min(400, 25 * (attempt + 1))); }
             }
         }
-        catch (Exception e) { status("Clip not saved: " + e.Message); }
+        catch (Exception e) { lastCaptured = sequence; status("Clip not saved: " + e.Message); }
         finally
         {
             Interlocked.Decrement(ref pending);
-            if (queuedSequence != 0 && !disposed)
-            {
-                uint next = queuedSequence; queuedSequence = 0;
-                _ = CaptureAsync(next);
-            }
+            uint next = Interlocked.Exchange(ref queuedSequence, 0);
+            if (next != 0 && !disposed) _ = CaptureAsync(next);
         }
     }
     private static int? ReadFlag(object? data) => data switch { MemoryStream m when m.Length >= 4 => BitConverter.ToInt32(m.ToArray()), byte[] b when b.Length >= 4 => BitConverter.ToInt32(b), int i => i, _ => null };
@@ -112,16 +116,15 @@ public sealed class ClipboardService : IDisposable
                 using var stream = new MemoryStream(bytes);
                 var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None).Frames[0];
                 if ((long)frame.PixelWidth * frame.PixelHeight * 4 > limit * 4) throw new InvalidOperationException("Image dimensions exceed the capture memory limit.");
-                return new() { Kind = ClipKind.Image, Image = bytes, Source = owner, Name = $"Image · {frame.PixelWidth} × {frame.PixelHeight}" };
+                return new() { Kind = ClipKind.Image, Image = ImageFidelity.NormalizePng(bytes), Source = owner, Name = $"Image · {frame.PixelWidth} × {frame.PixelHeight}" };
             }
         }
-        if (data.GetDataPresent(DataFormats.Bitmap) && data.GetData(DataFormats.Bitmap) is BitmapSource bitmap)
+        if ((data.GetDataPresent(DataFormats.Bitmap) || data.GetDataPresent(DataFormats.Dib)) && ReadBitmap(data) is { } bitmap)
         {
             if ((long)bitmap.PixelWidth * bitmap.PixelHeight * 4 > limit * 4) throw new InvalidOperationException("Image dimensions exceed the capture memory limit.");
-            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using var stream = new MemoryStream(); encoder.Save(stream);
-            if (stream.Length > limit * 0.7) throw new InvalidOperationException("Image exceeds the item size limit.");
-            return new() { Kind = ClipKind.Image, Image = stream.ToArray(), Source = owner, Name = $"Image · {bitmap.PixelWidth} × {bitmap.PixelHeight}" };
+            var png = ImageFidelity.Encode(ImageFidelity.Normalize(bitmap, out _));
+            if (png.Length > limit * 0.7) throw new InvalidOperationException("Image exceeds the item size limit.");
+            return new() { Kind = ClipKind.Image, Image = png, Source = owner, Name = $"Image · {bitmap.PixelWidth} × {bitmap.PixelHeight}" };
         }
         string? text = ClipText.Read(data.GetData(DataFormats.UnicodeText), true);
         if (string.IsNullOrEmpty(text)) text = ClipText.Read(data.GetData(DataFormats.Text)) ?? text;
@@ -138,6 +141,24 @@ public sealed class ClipboardService : IDisposable
         }
         var isLink = Uri.TryCreate(text.Trim(), UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http";
         return ClipText.Normalize(new() { Kind = isLink ? ClipKind.Link : ClipKind.Text, Text = text, Html = html, Rtf = rtf, Source = owner, CaptureNote = note });
+    }
+    private static BitmapSource? ReadBitmap(System.Windows.IDataObject data)
+    {
+        if (data.GetDataPresent(DataFormats.Bitmap) && data.GetData(DataFormats.Bitmap) is BitmapSource direct) return direct;
+        return data.GetDataPresent(DataFormats.Dib) && data.GetData(DataFormats.Dib) is MemoryStream dib ? DibToBitmap(dib.ToArray()) : null;
+    }
+    // CF_DIB is a BITMAPINFOHEADER-prefixed device-independent bitmap; wrap it as a BMP file to decode it.
+    internal static BitmapSource? DibToBitmap(byte[] dib)
+    {
+        if (dib.Length < 40) return null;
+        int header = BitConverter.ToInt32(dib, 0), bits = BitConverter.ToInt16(dib, 14), compression = BitConverter.ToInt32(dib, 16), colors = BitConverter.ToInt32(dib, 32);
+        int masks = header == 40 && compression == 3 ? 12 : 0;
+        int palette = bits <= 8 ? (colors == 0 ? 1 << bits : colors) * 4 : 0;
+        var file = new byte[14 + dib.Length];
+        file[0] = (byte)'B'; file[1] = (byte)'M'; BitConverter.GetBytes(file.Length).CopyTo(file, 2); BitConverter.GetBytes(14 + header + masks + palette).CopyTo(file, 10);
+        dib.CopyTo(file, 14);
+        using var stream = new MemoryStream(file);
+        var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0]; frame.Freeze(); return frame;
     }
     internal static System.Windows.DataObject CreateData(ClipPayload payload, bool plain)
     {
@@ -211,6 +232,9 @@ public sealed class ClipboardService : IDisposable
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipboardPlus", "CopyExports")));
     internal Task PublishForPasteAsync(ClipPayload payload, bool plain, Func<ClipboardReceipt, Task> deliver)
         => PutDataAsync(() => CreateData(payload, plain), deliver);
+    internal static string ExportRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipboardPlus", "CopyExports");
+    internal Task PublishManyForPasteAsync(IReadOnlyList<ClipPayload> payloads, Func<ClipboardReceipt, Task> deliver)
+        => PutDataAsync(() => CreateManyData(payloads, ExportRoot), deliver);
     internal async Task<bool> IsCurrentAsync(ClipboardReceipt receipt)
     {
         await Ready;

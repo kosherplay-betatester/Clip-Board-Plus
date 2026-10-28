@@ -16,6 +16,7 @@ internal static class SelfTests
         try
         {
             await ReliabilityTests.RunAsync(root, Check);
+            await ImageTests.RunAsync(root, Check);
             await CodeTests.CoreAsync(root, Check);
             var config = new AppSettings { MaxItems = 100, CacheBudgetMb = 1 };
             using (var store = new HistoryStore(root, config))
@@ -127,6 +128,15 @@ internal static class SelfTests
                 var otherData = new System.Windows.DataObject(); otherData.SetImage(BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, Enumerable.Repeat((byte)255, 16).ToArray(), 8));
                 await imageStore.AddAsync(ClipboardService.ReadPayload(otherData, "Other image", 100000)!);
                 Check(await MainWindow.VerifyPreviewRoutingAsync(imageStore), "Second image preview opens its own payload even with the first image selected and open");
+                using var layoutStore = new HistoryStore(Path.Combine(root, "layout"), new());
+                for (int i = 0; i < 12; i++) await layoutStore.AddAsync(new() { Text = $"Layout fixture {i} - second line of a typical copied snippet", Source = "Notepad" });
+                foreach (var (dip, label) in new[] { (1040d, "100%"), (594d, "175%"), (520d, "200%") })
+                {
+                    int visible = await MainWindow.VisibleRowsAtAsync(layoutStore, Math.Min(700, dip - 16));
+                    report.Add(new { test = $"visible rows at {label}", rows = visible, layout = MainWindow.LastLayout });
+                    if (label != "200%") Check(visible >= 5, $"At least five history rows are fully visible at {label} display scaling (1080p work area) — saw {visible}");
+                }
+                Check(await MainWindow.VerifyMultiPasteAsync(imageStore), "Paste with a multi-item selection prepares every selected item in list order without a prior Copy");
                 Check(await MainWindow.VerifySelectionRefreshAsync(imageStore), "Refresh preserves multiple selection and never restores selection captured before an asynchronous query");
             }
             using (var bounded = new HistoryStore(Path.Combine(root, "bounded"), new AppSettings { DiskBudgetMb = 32, MaxItemMb = 4 }))
@@ -275,6 +285,23 @@ internal static class SelfTests
                 if (!received.TryDequeue(out var actual) || actual.Text != expected) throw new InvalidOperationException($"Sequential capture mismatch at {i}");
             }
             check(true, "Twenty real Unicode copy events retain the correct payload and order");
+            // A save that fails twice (busy database) must be retried and only then counted as captured.
+            int saveAttempts = 0; var saved = new System.Collections.Concurrent.ConcurrentQueue<ClipPayload>();
+            using (var flaky = new ClipboardService(new(), p => { if (Interlocked.Increment(ref saveAttempts) <= 2) throw new IOException("database busy"); saved.Enqueue(p); return Task.CompletedTask; }, _ => { }))
+            {
+                await flaky.Ready; received.Clear();
+                for (int tries = 0; ; tries++) { try { System.Windows.Clipboard.SetText("Retry until saved fixture"); break; } catch (System.Runtime.InteropServices.ExternalException) when (tries < 40) { await Task.Delay(50); } }
+                for (int wait = 0; wait < 200 && saved.IsEmpty; wait++) await Task.Delay(25);
+                await Task.Delay(200);
+                check(saved.Count == 1 && saved.TryPeek(out var retried) && retried.Text == "Retry until saved fixture" && saveAttempts == 3, "Transient save failures are retried and the clip is marked captured only after the save succeeds");
+            }
+            // Telegram-style image on the real clipboard: PNG with every alpha byte 0 must be stored as the visible photo.
+            received.Clear();
+            var telegramPng = ImageTests.MakePng(6, 5, ImageTests.Color);
+            var telegramData = new System.Windows.DataObject(); telegramData.SetData("PNG", new MemoryStream(telegramPng), false);
+            for (int tries = 0; ; tries++) { try { System.Windows.Clipboard.SetDataObject(telegramData, true); break; } catch (System.Runtime.InteropServices.ExternalException) when (tries < 40) { await Task.Delay(50); } }
+            for (int wait = 0; wait < 80 && received.IsEmpty; wait++) await Task.Delay(25);
+            check(received.TryDequeue(out var tgClip) && tgClip.Kind == ClipKind.Image && ImageTests.Bgra(tgClip.Image!)[3] == 255 && ImageTests.Bgra(tgClip.Image!)[0] == ImageTests.Color(0, 0).B, "Real clipboard capture of a Telegram-style PNG keeps colors and is visible");
             var privateData = new System.Windows.DataObject(); privateData.SetText("Do not retain this synthetic fixture"); privateData.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream([1]));
             System.Windows.Clipboard.SetDataObject(privateData, true); await Task.Delay(150);
             check(received.IsEmpty, "Real capture respects history exclusion format");

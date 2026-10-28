@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.4 — 2026-10-28
+
+- **Telegram / black images.** Telegram (Qt) publishes opaque photos as PNG with every alpha byte set to 0. They were stored and replayed as fully transparent, so previews and pastes appeared black. The colour channels were intact: capture now treats an all-zero-alpha image that carries colour as opaque, and genuine transparency (any non-zero alpha) is never touched. Images already in history are repaired in place in the background (lossless; pixel RGB values are unchanged). Plain CF_DIB-only images are now captured too.
+- **Captures that never appeared.** A clip was marked "captured" before it was saved, so a transient save failure (busy database, locked file) lost it permanently. It is now marked only after the save succeeds, retried for about 2.5 seconds for locked-clipboard, database and I/O errors, and reported in the status line if it still fails. Capture of a newer clipboard change is queued, not dropped.
+- **Multi-item Paste.** With several clips selected, Paste / Enter / double-click prepares all of them in list order and pastes — no preliminary Copy needed. A missing item cancels the whole paste with a message. Exact-text paste joins the selection as plain text.
+- **Compact list.** Shorter title bar and header, single-line previews and tighter rows: at least five clips are fully visible at 100% and 175% scaling on a 1080p display (7 and 5 measured). The window clamps to the monitor's work area. At 200% on 1080p four rows fit; larger displays show more.
+- Added 14 regression checks: pixel-exact image capture/storage/publish, DIB decoding, repair migration, transparency preservation, retry-on-save-failure, multi-paste order, visible-row counts. See `docs/VERIFICATION-1.1.4.md`.
+
 ## 1.1.3 — 2026-09-22
 
 - Fix the Actions menu's white icon gutter overlapping command labels. Its frame, rows, separators and scroll area now use one consistent template.

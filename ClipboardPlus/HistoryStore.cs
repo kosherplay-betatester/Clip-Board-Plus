@@ -63,7 +63,8 @@ public sealed class HistoryStore : IDisposable
             }
             finally { Execute("PRAGMA foreign_keys=ON;"); }
         }
-        Execute("PRAGMA user_version=2;");
+        using var version = Command("PRAGMA user_version");
+        if ((long)version.ExecuteScalar()! < 2) Execute("PRAGMA user_version=2;");
     }
     private static byte[] Protect(byte[] bytes) => ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
     private static byte[] Unprotect(byte[] bytes) => ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser);
@@ -219,6 +220,34 @@ public sealed class HistoryStore : IDisposable
             repairCursor = id;
         }
         return batch.Count == 16;
+    });
+    // Version 3: images captured with an all-zero alpha channel (opaque RGB32 from apps such as Telegram)
+    // are made opaque. Only images that are invisible yet carry color data are rewritten.
+    private long imageRepairCursor;
+    public Task<bool> RepairImagesBatchAsync() => Work(() =>
+    {
+        using (var v = Command("PRAGMA user_version")) if ((long)v.ExecuteScalar()! >= 3) return false;
+        var ids = new List<long>();
+        using (var c = Command("SELECT id FROM clips WHERE id>$id AND kind=2 ORDER BY id LIMIT 4", ("$id", imageRepairCursor)))
+        using (var r = c.ExecuteReader()) while (r.Read()) ids.Add(r.GetInt64(0));
+        foreach (var id in ids)
+        {
+            imageRepairCursor = id;
+            using var get = Command("SELECT payload,summary FROM clips WHERE id=$id", ("$id", id)); using var rd = get.ExecuteReader();
+            if (!rd.Read()) continue;
+            var payload = JsonSerializer.Deserialize<ClipPayload>(Unprotect((byte[])rd[0]))!; var summary = JsonSerializer.Deserialize<ClipSummary>(Unprotect((byte[])rd[1]))!;
+            rd.Close();
+            if (payload.Image is not { } image) continue;
+            byte[] repaired;
+            try { repaired = ImageFidelity.NormalizePng(image); } catch (Exception) { continue; }
+            if (ReferenceEquals(repaired, image)) continue;
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(payload with { Image = repaired }, payloadJson);
+            summary = summary with { Thumbnail = MakeThumbnail(repaired) };
+            using var update = Command("UPDATE clips SET payload=$payload,summary=$summary,bytes=$bytes WHERE id=$id", ("$payload", Protect(bytes)), ("$summary", Protect(JsonSerializer.SerializeToUtf8Bytes(summary))), ("$bytes", bytes.LongLength), ("$id", id));
+            update.ExecuteNonQuery(); cache.Remove(id);
+        }
+        if (ids.Count < 4) { Execute("PRAGMA user_version=3;"); return false; }
+        return true;
     });
     private ClipSummary RepairText(long id, ClipSummary summary)
     {
