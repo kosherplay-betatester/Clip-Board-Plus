@@ -127,8 +127,17 @@ public sealed class ClipboardService : IDisposable
             return new() { Kind = ClipKind.Image, Image = png, Source = owner, Name = $"Image · {bitmap.PixelWidth} × {bitmap.PixelHeight}" };
         }
         string? text = ClipText.Read(data.GetData(DataFormats.UnicodeText), true);
-        if (string.IsNullOrEmpty(text)) text = ClipText.Read(data.GetData(DataFormats.Text)) ?? text;
         string? html = ClipText.Read(data.GetData(DataFormats.Html)), rtf = ClipText.Read(data.GetData(DataFormats.Rtf));
+        // The ANSI text format cannot hold Hebrew/CJK/emoji (they become '?'). Use it only when no Unicode-safe source has visible text.
+        if (string.IsNullOrEmpty(text) && !ClipText.HasVisibleText(ClipText.FromHtml(html)) && !ClipText.HasVisibleText(ClipText.FromRtf(rtf))) text = ClipText.Read(data.GetData(DataFormats.Text)) ?? text;
+        // Windows can synthesize Unicode text from the ANSI format, which turns Hebrew/CJK into '?'. A '?'-only string whose
+        // rich formats hold real non-ASCII text is that degradation, so prefer the faithful text.
+        if (!string.IsNullOrEmpty(text) && text.Contains('?') && text.All(c => c == '?' || char.IsWhiteSpace(c)))
+        {
+            var recovered = ClipText.FromHtml(html);
+            if (!ClipText.HasVisibleText(recovered)) recovered = ClipText.FromRtf(rtf);
+            if (recovered.Any(c => c > 127)) text = recovered;
+        }
         if (text is null && html is null && rtf is null) return null;
         text ??= "";
         string? note = null;

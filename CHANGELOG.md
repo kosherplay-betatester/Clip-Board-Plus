@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.5 — 2026-10-28
+
+- **Hebrew/Unicode text shown as `??????`.** When the plain-text slot of a copy (seen with Chrome) was the lossy ANSI form, the saved text was all question marks even though the HTML held the real text. Capture now prefers the faithful text from the HTML/RTF in that case and only falls back to ANSI when nothing better exists. Genuine question marks are never replaced unless the rich data holds different non-ASCII text.
+- Existing clips with `?`-only text and recoverable HTML are repaired in place in the background (original HTML and fingerprint untouched).
+
 ## 1.1.4 — 2026-10-28
 
 - **Telegram / black images.** Telegram (Qt) publishes opaque photos as PNG with every alpha byte set to 0. They were stored and replayed as fully transparent, so previews and pastes appeared black. The colour channels were intact: capture now treats an all-zero-alpha image that carries colour as opaque, and genuine transparency (any non-zero alpha) is never touched. Images already in history are repaired in place in the background (lossless; pixel RGB values are unchanged). Plain CF_DIB-only images are now captured too.

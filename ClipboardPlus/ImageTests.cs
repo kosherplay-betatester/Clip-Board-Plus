@@ -63,6 +63,11 @@ internal static class ImageTests
         var publishedPng = published.GetData("PNG") is MemoryStream ps ? ps.ToArray() : [];
         check(publishedPng.Length > 0 && SameColor(original, Bgra(publishedPng)) && Bgra(publishedPng)[3] == 255, "Published clipboard PNG matches the stored pixels");
 
+        // Hebrew copied from Chrome: Unicode text missing, ANSI text degraded to '?', HTML intact.
+        var chrome = new System.Windows.DataObject();
+        chrome.SetData(DataFormats.Text, "?????? ??????", false);
+        chrome.SetData(DataFormats.Html, new MemoryStream(Encoding.UTF8.GetBytes("Version:0.9 <html><body><!--StartFragment--><h1>גלריה מיילים</h1><!--EndFragment--></body></html>")), false);
+        check(ClipboardService.ReadPayload(chrome, "chrome", 1048576)!.Text == "גלריה מיילים", "ANSI '?' fallback never replaces real Unicode text recoverable from HTML");
         // Existing history written before the fix is recoverable in place because the RGB channels were stored.
         string repairRoot = Path.Combine(root, "image-repair");
         using var store = new HistoryStore(repairRoot, new());
@@ -71,6 +76,11 @@ internal static class ImageTests
         while (await store.RepairImagesBatchAsync()) { }
         var repaired = await store.GetAsync(broken); var kept = await store.GetAsync(keep);
         check(Bgra(repaired!.Image!)[3] == 255 && SameColor(original, Bgra(repaired.Image!)) && kept!.Image!.SequenceEqual(transparent), "Stored invisible images are repaired in place; transparent images remain byte-identical");
+        long garbled = await store.AddAsync(new() { Text = "?????? ??????", Html = "<html><body><!--StartFragment--><p>שלום עולם</p><!--EndFragment--></body></html>" });
+        long literal = await store.AddAsync(new() { Text = "Is this right?? yes", Html = "<p>שלום</p>" });
+        while (await store.RepairImagesBatchAsync()) { }
+        while (await store.RepairGarbledTextBatchAsync()) { }
+        check((await store.GetAsync(garbled))!.Text == "שלום עולם" && (await store.GetAsync(literal))!.Text == "Is this right?? yes", "Stored '?'-only text is recovered from its HTML; genuine question marks stay exactly as copied");
         var thumb = (await store.QueryAsync(new(Filter: "Image"))).Single(r => r.Id == broken).Summary.Thumbnail;
         check(thumb is not null && Bgra(thumb)[3] == 255, "Repaired image thumbnails are visible");
     }

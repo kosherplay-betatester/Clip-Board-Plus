@@ -249,6 +249,32 @@ public sealed class HistoryStore : IDisposable
         if (ids.Count < 4) { Execute("PRAGMA user_version=3;"); return false; }
         return true;
     });
+    // Version 4: text captured through the ANSI fallback ("??????") whose HTML holds the real Unicode text.
+    private long garbledCursor;
+    public Task<bool> RepairGarbledTextBatchAsync() => Work(() =>
+    {
+        using (var v = Command("PRAGMA user_version")) if ((long)v.ExecuteScalar()! != 3) return false; // runs after the image pass
+        var batch = new List<(long Id, ClipPayload Payload, ClipSummary Summary)>();
+        using (var c = Command("SELECT id,payload,summary FROM clips WHERE id>$id AND kind IN (0,1) ORDER BY id LIMIT 32", ("$id", garbledCursor)))
+        using (var r = c.ExecuteReader())
+            while (r.Read()) { garbledCursor = r.GetInt64(0); batch.Add((garbledCursor, JsonSerializer.Deserialize<ClipPayload>(Unprotect((byte[])r[1]))!, JsonSerializer.Deserialize<ClipSummary>(Unprotect((byte[])r[2]))!)); }
+        foreach (var (id, payload, summary) in batch)
+        {
+            if (payload.Html is null || payload.Text.Length == 0 || !payload.Text.Contains('?') || payload.Text.Any(ch => ch != '?' && !char.IsWhiteSpace(ch))) continue;
+            var recovered = ClipText.FromHtml(payload.Html);
+            if (!ClipText.HasVisibleText(recovered) || !recovered.Any(ch => ch > 127)) continue;
+            var fixedPayload = payload with { Text = recovered };
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(fixedPayload, payloadJson);
+            var newSummary = summary with { Title = fixedPayload.Title, Preview = fixedPayload.Preview };
+            using var tx = db.BeginTransaction();
+            using var update = Command("UPDATE clips SET payload=$payload,summary=$summary,bytes=$bytes WHERE id=$id", ("$payload", Protect(bytes)), ("$summary", Protect(JsonSerializer.SerializeToUtf8Bytes(newSummary))), ("$bytes", bytes.LongLength), ("$id", id)); update.Transaction = tx; update.ExecuteNonQuery();
+            using var insert = Command("INSERT OR IGNORE INTO tokens(token,clip_id) VALUES($token,$id)", ("$token", Array.Empty<byte>()), ("$id", id)); insert.Transaction = tx; insert.Prepare();
+            foreach (var token in IndexTokens(IndexableText(fixedPayload))) { insert.Parameters["$token"].Value = Hash(token); insert.ExecuteNonQuery(); }
+            tx.Commit(); cache.Remove(id);
+        }
+        if (batch.Count < 32) { Execute("PRAGMA user_version=4;"); return false; }
+        return true;
+    });
     private ClipSummary RepairText(long id, ClipSummary summary)
     {
         using var get = Command("SELECT payload FROM clips WHERE id=$id", ("$id", id));
