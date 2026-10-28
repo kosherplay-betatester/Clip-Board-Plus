@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.1.6"
+  #define AppVersion "1.2.0"
 #endif
 #ifndef PayloadDir
   #error PayloadDir must point to the self-contained publish folder
@@ -71,6 +71,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\ClipboardPlus.exe"; Description: "Open Clipboard Plus"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\ClipboardPlus.exe"; Flags: nowait runasoriginaluser; Check: RelaunchRequested
 
 [Code]
 function OpenEvent(Access: LongWord; Inherit: Boolean; Name: String): THandle;
@@ -79,6 +80,14 @@ function SignalEvent(Event: THandle): Boolean;
   external 'SetEvent@kernel32.dll stdcall';
 function CloseHandle(Handle: THandle): Boolean;
   external 'CloseHandle@kernel32.dll stdcall';
+
+function RelaunchRequested: Boolean;
+var I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/RELAUNCH') = 0 then Result := True;
+end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var Event: THandle; Attempt: Integer;

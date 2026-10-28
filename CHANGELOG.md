@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 — 2026-10-28
+
+- **Sensitive content protection.** New Settings section: off, *Don't save*, or *Lock with a password*. Detection is local (card numbers with Luhn check, IBAN, API keys, GitHub/AWS tokens, JWTs, private keys, labelled passwords in English/Hebrew, mixed-class password-like tokens). Locked clips are encrypted to a key only your password or recovery code can unwrap; capture keeps working while locked. They appear as 🔒 rows, are not searchable or previewable, relock after 5 minutes (or *Lock now*), and ask for the password when you paste/copy/preview them.
+- **Password safety net.** Password is entered twice; a one-time recovery code is shown with a "I saved it" confirmation. Forgot the password: use the recovery code, or *Reset password and delete protected items* — which requires typing DELETE and only removes protected items.
+- **Update prompt at startup** with *Update now / Later* and *Don't remind me again until the next version*. Update now downloads the installer from the GitHub release, verifies SHA-256, closes the app, installs silently and relaunches it (`/RELAUNCH` installer switch).
+- Database gains a `locked` column (migrated automatically); 33 new regression checks (130 total).
+
 ## 1.1.6 — 2026-10-28
 
 - Larger, clearer Minimize and Close buttons (46×32) with hover and keyboard-focus highlight; Close turns red on hover.

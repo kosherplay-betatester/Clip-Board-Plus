@@ -1,0 +1,6 @@
+# Clipboard Plus 1.2.0 — verification
+
+- Deterministic suite: 130 checks pass (Windows 11 build 26200, .NET SDK 10.0.303). New checks cover detection positives/negatives, vault creation rules (twice-typed, minimum length), encrypt-while-locked / decrypt-only-when-unlocked, wrong password, recovery code (any letter case), password change, restart persistence, locked rows hidden from search/preview, snippets never locked, Skip mode, reset deleting only protected items, release JSON parsing, quiet-until-next-version logic, HTTPS GitHub-only download hosts, and SHA-256 verification.
+- Legacy 9-column databases migrate to the new schema (existing migration test passes).
+- Not verified by automation: the visual appearance of the new password/recovery/update dialogs, a full download-and-silent-reinstall from a live newer release (it needs a release newer than the installed build), and detection quality on your real data (heuristics can miss or over-flag; *possible password* is the most likely false positive).
+- Security notes: no backdoor exists. Locked items use ECDH P-256 + AES-GCM; the private key is wrapped with PBKDF2-SHA256 (310,000 iterations) under the password and, separately, under the recovery code.

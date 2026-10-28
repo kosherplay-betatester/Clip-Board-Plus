@@ -50,7 +50,7 @@ public partial class MainWindow : Window
         initialized = true;
         Height = Math.Min(Height, Math.Max(MinHeight, SystemParameters.WorkArea.Height - 16));
         var handle = new WindowInteropHelper(this).EnsureHandle();
-        clipboard = new(settings, async payload => { await store.AddAsync(payload); _ = Dispatcher.BeginInvoke(MarkHistoryChanged); }, text => Dispatcher.BeginInvoke(() => { SetStatus(text); if (!IsVisible && tray is not null && (text.StartsWith("Clip not saved:", StringComparison.Ordinal) || text.StartsWith("Full text saved.", StringComparison.Ordinal))) tray.ShowBalloonTip(5000, "Clipboard Plus", text, System.Windows.Forms.ToolTipIcon.Info); }));
+        clipboard = new(settings, async payload => { long saved = await store.AddAsync(payload); _ = Dispatcher.BeginInvoke(() => { if (saved == 0) { SetStatus("Sensitive content was not saved (see Settings → Sensitive content)."); if (!IsVisible && tray is not null) tray.ShowBalloonTip(3000, "Clipboard Plus", "Sensitive content was not saved.", System.Windows.Forms.ToolTipIcon.Info); } else MarkHistoryChanged(); }); }, text => Dispatcher.BeginInvoke(() => { SetStatus(text); if (!IsVisible && tray is not null && (text.StartsWith("Clip not saved:", StringComparison.Ordinal) || text.StartsWith("Full text saved.", StringComparison.Ordinal))) tray.ShowBalloonTip(5000, "Clipboard Plus", text, System.Windows.Forms.ToolTipIcon.Info); }));
         clipboard.Paused = demo;
         await clipboard.Ready;
         hotkeys = new(handle, ShowPanel);
@@ -60,7 +60,32 @@ public partial class MainWindow : Window
         if (demo) SetStatus("Demo workspace · capture paused · sample clips only");
         else if (settings.WindowsHistoryManaged) { try { SetStatus(WindowsHistorySettings.Apply(settings)); } catch (Exception e) { SetStatus("Could not apply Windows history preference: " + e.Message); } }
         loaded.TrySetResult();
+        if (!demo) _ = Safe(CheckForUpdateOnStartupAsync);
         _ = Safe(async () => { while (!exiting && await store.RepairTextBatchAsync()) await Task.Delay(50); while (!exiting && await store.RepairImagesBatchAsync()) await Task.Delay(100); while (!exiting && await store.RepairGarbledTextBatchAsync()) await Task.Delay(100); if (!exiting && SearchBox.Text.Length > 0) MarkHistoryChanged(); });
+    }
+    // Quietly looks for a newer release a few seconds after start. Offline or rate-limited checks stay silent.
+    private async Task CheckForUpdateOnStartupAsync()
+    {
+        await Task.Delay(TimeSpan.FromSeconds(6));
+        if (exiting) return;
+        UpdateInfo info;
+        try { using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20)); info = await UpdateChecker.GetLatestAsync(timeout.Token); }
+        catch (Exception) { return; }
+        if (exiting || !UpdateChecker.ShouldPrompt(info, UpdateChecker.CurrentVersion, settings.SkippedUpdateVersion)) return;
+        var (updateNow, dontRemind) = UpdatePrompt.Ask(IsVisible ? this : null, info, UpdateChecker.CurrentVersion);
+        if (dontRemind) { settings = settings with { SkippedUpdateVersion = info.Version.ToString() }; settings.Save(store.Root); }
+        if (updateNow) await ApplyUpdateAsync(info);
+    }
+    private async Task ApplyUpdateAsync(UpdateInfo info)
+    {
+        SetStatus($"Downloading Clipboard Plus {info.Version}…");
+        string installer;
+        try { using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(10)); installer = await UpdateChecker.DownloadAsync(info, timeout.Token); }
+        catch (Exception e) { SetStatus("Update failed: " + e.Message); MessageBox.Show("The update could not be installed." + Environment.NewLine + Environment.NewLine + e.Message + Environment.NewLine + Environment.NewLine + "You can download it from the releases page instead.", "Clipboard Plus"); return; }
+        for (int i = 0; i < 100 && clipboardAction; i++) await Task.Delay(50);
+        if (clipboardAction) { SetStatus("Finish the current paste, then choose Check for updates again."); return; }
+        UpdateChecker.LaunchInstallerAfterExit(installer);
+        Exit();
     }
     private void CreateTray()
     {
@@ -183,10 +208,20 @@ public partial class MainWindow : Window
         e.Handled = true;
         if (((Button)sender).Tag is ClipRow row) await Safe(async () => { await store.SetPinAsync(row.Id, !row.Pinned); await RefreshAsync(); });
     }
+    // Locked (sensitive) items ask for the password; a refusal stops the whole action with a clear message.
+    private async Task<ClipPayload?> LoadAsync(long id)
+    {
+        try { return await store.GetAsync(id); }
+        catch (LockedException)
+        {
+            if (!VaultDialogs.Unlock(this, store.Vault, store)) throw new LockedException();
+            return await store.GetAsync(id);
+        }
+    }
     private async Task<ClipPayload?> SelectedPayloadAsync()
     {
         if (ClipList.SelectedItem is not ClipRow row) { SetStatus("Select a clip first."); return null; }
-        var payload = await store.GetAsync(row.Id);
+        var payload = await LoadAsync(row.Id);
         if (payload is null) { SetStatus("This clip has expired or was removed."); await RefreshAsync(); }
         return payload;
     }
@@ -210,7 +245,7 @@ public partial class MainWindow : Window
             var loaded = new List<ClipPayload>();
             foreach (var itemId in selectionIds)
             {
-                var item = await store.GetAsync(itemId);
+                var item = await LoadAsync(itemId);
                 if (item is null) { SetStatus("A selected clip was removed. Nothing was pasted; select the remaining items again."); await RefreshAsync(); return; }
                 loaded.Add(item);
             }
@@ -218,7 +253,7 @@ public partial class MainWindow : Window
             payload = plain ? new ClipPayload { Text = string.Join(Environment.NewLine, loaded.Select(p => p.Kind == ClipKind.Files ? string.Join(Environment.NewLine, p.Paths) : p.Text).Where(t => t.Length > 0)), Source = "Clipboard Plus" } : loaded[0];
             if (plain) many = null;
         }
-        else payload = supplied ?? ((queueId ?? selectedId) is { } id ? await store.GetAsync(id) : null);
+        else payload = supplied ?? ((queueId ?? selectedId) is { } id ? await LoadAsync(id) : null);
         if (payload is null)
         {
             if (queueId is not null) { pasteQueue.Dequeue(); UpdateQueue(); SetStatus("A queued clip was removed. Continue with the next item."); }
@@ -291,7 +326,7 @@ public partial class MainWindow : Window
             var payloads = new List<ClipPayload>(); long bytes = 0;
             foreach (var id in ids)
             {
-                var p = await store.GetAsync(id) ?? throw new InvalidOperationException("A selected clip was removed. Select the remaining items again.");
+                var p = await LoadAsync(id) ?? throw new InvalidOperationException("A selected clip was removed. Select the remaining items again.");
                 bytes += (p.Image?.LongLength ?? 0) + (long)p.Text.Length * 2;
                 if (bytes > 128 * 1048576L) throw new InvalidOperationException("Select fewer items: combined image and text data is limited to 128 MB.");
                 payloads.Add(p);
@@ -330,7 +365,7 @@ public partial class MainWindow : Window
     });
     internal async Task<PreviewWindow?> OpenPreviewAsync(ClipRow row)
     {
-        var payload = await store.GetAsync(row.Id);
+        var payload = await LoadAsync(row.Id);
         if (payload is null) { SetStatus("This clip is no longer in history."); return null; }
         var preview = new PreviewWindow(payload, async text => { var p = new ClipPayload { Kind = ClipKind.Text, Text = text, Source = "Clipboard Plus OCR" }; await store.AddAsync(p); await clipboard.PutAsync(p); SetStatus("Extracted text copied and saved."); }) { Owner = this };
         preview.Show(); return preview;
@@ -372,14 +407,14 @@ public partial class MainWindow : Window
         {
             var ids = rows.Where(r => ClipList.SelectedItems.Contains(r)).Select(r => r.Id).ToArray();
             var parts = new List<string>();
-            foreach (var id in ids) if (await store.GetAsync(id) is { Kind: ClipKind.Text or ClipKind.Link } p) parts.Add(p.Text);
+            foreach (var id in ids) if (await LoadAsync(id) is { Kind: ClipKind.Text or ClipKind.Link } p) parts.Add(p.Text);
             if (parts.Count == 0) throw new InvalidOperationException("Select text or links to copy a caption.");
             await PasteAsync(copyOnly: true, supplied: new() { Text = string.Join(Environment.NewLine, parts) });
         });
         Add("Combine selected as lines", async () =>
         {
             var parts = new List<string>();
-            foreach (var row in rows.Where(r => ClipList.SelectedItems.Contains(r))) if (await store.GetAsync(row.Id) is { } p) parts.Add(p.Kind == ClipKind.Files ? string.Join(Environment.NewLine, p.Paths) : p.Text);
+            foreach (var row in rows.Where(r => ClipList.SelectedItems.Contains(r))) if (await LoadAsync(row.Id) is { } p) parts.Add(p.Kind == ClipKind.Files ? string.Join(Environment.NewLine, p.Paths) : p.Text);
             var payload = new ClipPayload { Text = string.Join(Environment.NewLine, parts.Where(s => s.Length > 0)), Source = "Clipboard Plus", Kind = ClipKind.Text };
             if (payload.Text.Length == 0) throw new InvalidOperationException("Select text, links, or file paths to combine.");
             await store.AddAsync(payload); await clipboard.PutAsync(payload); SetStatus("Combined text copied and saved."); await RefreshAsync();
@@ -391,6 +426,7 @@ public partial class MainWindow : Window
         Add("Copy lowercase", () => TransformAsync(s => s.ToLowerInvariant()));
         Add("Copy file paths", () => PasteAsync(true, true));
         Separate();
+        if (store.Vault.Exists) Add("Lock sensitive items now", () => { store.Vault.Lock(); SetStatus("Sensitive items are locked."); return Task.CompletedTask; });
         Add("Delete selected clips", DeleteSelectedAsync, "Delete");
         return menu;
     }

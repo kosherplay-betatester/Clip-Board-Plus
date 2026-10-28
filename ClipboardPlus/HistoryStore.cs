@@ -17,10 +17,11 @@ public sealed class HistoryStore : IDisposable
     // Persist original data once; computed labels/search text belong to summaries/indexes.
     private static readonly JsonSerializerOptions payloadJson = new() { IgnoreReadOnlyProperties = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     public string Root { get; }
+    public Vault Vault { get; }
     public long CacheBytes => cache.Bytes;
     public HistoryStore(string root, AppSettings settings)
     {
-        Root = root; this.settings = settings;
+        Root = root; this.settings = settings; Vault = new(root);
         Directory.CreateDirectory(root);
         var keyPath = Path.Combine(root, "search.key");
         if (!File.Exists(keyPath)) File.WriteAllBytes(keyPath, Protect(RandomNumberGenerator.GetBytes(32)));
@@ -63,6 +64,7 @@ public sealed class HistoryStore : IDisposable
             }
             finally { Execute("PRAGMA foreign_keys=ON;"); }
         }
+        using (var info = Command("SELECT COUNT(*) FROM pragma_table_info('clips') WHERE name='locked'")) if ((long)info.ExecuteScalar()! == 0) Execute("ALTER TABLE clips ADD COLUMN locked INTEGER NOT NULL DEFAULT 0;");
         using var version = Command("PRAGMA user_version");
         if ((long)version.ExecuteScalar()! < 2) Execute("PRAGMA user_version=2;");
     }
@@ -87,6 +89,10 @@ public sealed class HistoryStore : IDisposable
     {
         payload = ClipText.Normalize(payload);
         ClipText.ValidateUnicode(payload.Text);
+        // User-created snippets (pinned) are deliberate and never screened.
+        string? sensitive = !pin && settings.SensitiveMode != "Off" && payload.Kind is ClipKind.Text or ClipKind.Link ? SensitiveText.Detect(payload.Text) : null;
+        bool locked = sensitive is not null && settings.SensitiveMode == "Lock" && Vault.Exists;
+        if (sensitive is not null && !locked) return 0; // Skip mode (or no password yet): never keep it in readable history.
         var bytes = JsonSerializer.SerializeToUtf8Bytes(payload, payloadJson);
         if (bytes.Length > settings.MaxItemMb * 1048576L) throw new InvalidOperationException("Clip exceeds the individual item limit. Increase it in Settings if needed.");
         // Source application and a user-assigned label must not prevent content deduplication.
@@ -100,16 +106,18 @@ public sealed class HistoryStore : IDisposable
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         using var tx = db.BeginTransaction();
         using var cmd = Command("""
-            INSERT INTO clips(fingerprint,kind,summary,payload,bytes,created,updated,pinned)
-            VALUES($hash,$kind,$summary,$payload,$bytes,$now,$now,$pin)
+            INSERT INTO clips(fingerprint,kind,summary,payload,bytes,created,updated,pinned,locked)
+            VALUES($hash,$kind,$summary,$payload,$bytes,$now,$now,$pin,$locked)
             ON CONFLICT(fingerprint) DO UPDATE SET updated=$now, pinned=MAX(clips.pinned,$pin),
                 summary=CASE WHEN $rename=1 THEN excluded.summary ELSE clips.summary END,
                 payload=CASE WHEN $rename=1 THEN excluded.payload ELSE clips.payload END,
                 bytes=CASE WHEN $rename=1 THEN excluded.bytes ELSE clips.bytes END
             RETURNING id;
             """, ("$hash", fingerprint), ("$kind", (int)payload.Kind),
-            ("$summary", Protect(JsonSerializer.SerializeToUtf8Bytes(new ClipSummary(payload.Title, payload.Preview, payload.Source, MakeThumbnail(payload.Image), MediaSourceInfo.From(payload), true, 1, payload.CaptureNote)))),
-            ("$payload", Protect(bytes)), ("$bytes", bytes.LongLength), ("$now", now), ("$pin", pin ? 1 : 0), ("$rename", rename ? 1 : 0));
+            ("$summary", Protect(JsonSerializer.SerializeToUtf8Bytes(locked
+                ? new ClipSummary("Sensitive item · " + sensitive, "Locked with your password. Unlock to view, preview or paste.", payload.Source, null, null, true, 1, null, true)
+                : new ClipSummary(payload.Title, payload.Preview, payload.Source, MakeThumbnail(payload.Image), MediaSourceInfo.From(payload), true, 1, payload.CaptureNote)))),
+            ("$payload", Protect(locked ? [.. "CPLK"u8, .. Vault.Encrypt(bytes)] : bytes)), ("$locked", locked ? 1 : 0), ("$bytes", bytes.LongLength), ("$now", now), ("$pin", pin ? 1 : 0), ("$rename", rename ? 1 : 0));
         cmd.Transaction = tx;
         var id = (long)cmd.ExecuteScalar()!;
         if (rename)
@@ -121,7 +129,7 @@ public sealed class HistoryStore : IDisposable
         {
             using var insert = Command("INSERT OR IGNORE INTO tokens(token,clip_id) VALUES($token,$id)", ("$token", Array.Empty<byte>()), ("$id", id));
             insert.Transaction = tx; insert.Prepare();
-            foreach (var token in IndexTokens(IndexableText(payload)))
+            foreach (var token in IndexTokens(locked ? payload.Source : IndexableText(payload)))
             {
                 insert.Parameters["$token"].Value = Hash(token); insert.ExecuteNonQuery();
             }
@@ -203,7 +211,10 @@ public sealed class HistoryStore : IDisposable
         {
             using var c = Command("SELECT payload FROM clips WHERE id=$id", ("$id", id));
             if (c.ExecuteScalar() is not byte[] encrypted) return null;
-            bytes = Unprotect(encrypted); if (!lowMemory) cache.Add(id, bytes);
+            bytes = Unprotect(encrypted);
+            if (bytes.Length > 4 && bytes.AsSpan(0, 4).SequenceEqual("CPLK"u8))
+                return ClipText.Normalize(JsonSerializer.Deserialize<ClipPayload>(Vault.Decrypt(bytes[4..]))!); // never cached
+            if (!lowMemory) cache.Add(id, bytes);
         }
         return ClipText.Normalize(JsonSerializer.Deserialize<ClipPayload>(bytes)!);
     });
@@ -211,7 +222,7 @@ public sealed class HistoryStore : IDisposable
     public Task<bool> RepairTextBatchAsync() => Work(() =>
     {
         var batch = new List<(long Id, ClipSummary Summary)>();
-        using (var c = Command("SELECT id,summary FROM clips WHERE id>$id AND kind IN (0,1) ORDER BY id LIMIT 16", ("$id", repairCursor)))
+        using (var c = Command("SELECT id,summary FROM clips WHERE id>$id AND kind IN (0,1) AND locked=0 ORDER BY id LIMIT 16", ("$id", repairCursor)))
         using (var r = c.ExecuteReader())
             while (r.Read()) batch.Add((r.GetInt64(0), JsonSerializer.Deserialize<ClipSummary>(Unprotect((byte[])r[1]))!));
         foreach (var (id, summary) in batch)
@@ -255,7 +266,7 @@ public sealed class HistoryStore : IDisposable
     {
         using (var v = Command("PRAGMA user_version")) if ((long)v.ExecuteScalar()! != 3) return false; // runs after the image pass
         var batch = new List<(long Id, ClipPayload Payload, ClipSummary Summary)>();
-        using (var c = Command("SELECT id,payload,summary FROM clips WHERE id>$id AND kind IN (0,1) ORDER BY id LIMIT 32", ("$id", garbledCursor)))
+        using (var c = Command("SELECT id,payload,summary FROM clips WHERE id>$id AND kind IN (0,1) AND locked=0 ORDER BY id LIMIT 32", ("$id", garbledCursor)))
         using (var r = c.ExecuteReader())
             while (r.Read()) { garbledCursor = r.GetInt64(0); batch.Add((garbledCursor, JsonSerializer.Deserialize<ClipPayload>(Unprotect((byte[])r[1]))!, JsonSerializer.Deserialize<ClipSummary>(Unprotect((byte[])r[2]))!)); }
         foreach (var (id, payload, summary) in batch)
@@ -297,6 +308,9 @@ public sealed class HistoryStore : IDisposable
         foreach (var id in ids) { using var c = Command("DELETE FROM clips WHERE id=$id", ("$id", id)); c.Transaction = tx; c.ExecuteNonQuery(); cache.Remove(id); }
         tx.Commit(); Compact(); return true;
     });
+    public Task<long> LockedCountAsync() => Work(() => { using var c = Command("SELECT COUNT(*) FROM clips WHERE locked=1"); return (long)c.ExecuteScalar()!; });
+    // Used when the password and recovery code are both lost: the locked items cannot be read, so they are removed.
+    public Task<long> DeleteLockedAsync() => Work(() => { using var c = Command("DELETE FROM clips WHERE locked=1"); long n = c.ExecuteNonQuery(); cache.Clear(); Compact(); return n; });
     public Task ClearAsync(bool includePinned) => Work(() => { Execute(includePinned ? "DELETE FROM clips" : "DELETE FROM clips WHERE pinned=0"); cache.Clear(); Compact(); return true; });
     public Task ConfigureAsync(AppSettings value) => Work(() => { value.Validate(); settings = value; cache.SetBudget(value.CacheBudgetMb * 1048576L); Prune(); return true; });
     public Task MaintainAsync() => Work(() => { Prune(); return true; });

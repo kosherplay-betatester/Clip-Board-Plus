@@ -35,7 +35,7 @@ internal static class ReliabilityTests
                 PRAGMA foreign_keys=OFF;
                 BEGIN;
                 CREATE TABLE old_clips(id INTEGER PRIMARY KEY, fingerprint BLOB NOT NULL UNIQUE, kind INTEGER NOT NULL, summary BLOB NOT NULL, payload BLOB NOT NULL, bytes INTEGER NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL, pinned INTEGER NOT NULL DEFAULT 0);
-                INSERT INTO old_clips SELECT * FROM clips;
+                INSERT INTO old_clips SELECT id,fingerprint,kind,summary,payload,bytes,created,updated,pinned FROM clips;
                 DROP TABLE clips;
                 ALTER TABLE old_clips RENAME TO clips;
                 UPDATE clips SET summary=$summary,payload=$payload;

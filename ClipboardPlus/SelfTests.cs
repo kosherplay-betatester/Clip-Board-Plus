@@ -17,6 +17,7 @@ internal static class SelfTests
         {
             await ReliabilityTests.RunAsync(root, Check);
             await ImageTests.RunAsync(root, Check);
+            await VaultTests.RunAsync(root, Check);
             await CodeTests.CoreAsync(root, Check);
             var config = new AppSettings { MaxItems = 100, CacheBudgetMb = 1 };
             using (var store = new HistoryStore(root, config))

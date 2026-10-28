@@ -25,14 +25,14 @@ public sealed record ClipPayload
         _ => ClipText.Display(Text, 300)
     };
 }
-public sealed record ClipSummary(string Title, string Preview, string Source, byte[]? Thumbnail = null, string? MediaSource = null, bool MediaChecked = false, int TextVersion = 0, string? CaptureNote = null);
+public sealed record ClipSummary(string Title, string Preview, string Source, byte[]? Thumbnail = null, string? MediaSource = null, bool MediaChecked = false, int TextVersion = 0, string? CaptureNote = null, bool Locked = false);
 public sealed record ClipRow(long Id, ClipKind Kind, ClipSummary Summary, long Bytes, DateTimeOffset Created, DateTimeOffset Updated, bool Pinned)
 {
     public string Title => Summary.Title;
     public string Preview => Summary.Preview;
     public string Source => Summary.Source;
     public string KindLabel => Kind.ToString().ToUpperInvariant();
-    public string Icon => Kind switch { ClipKind.Text => "≡", ClipKind.Link => "↗", ClipKind.Image => "▧", _ => "▱" };
+    public string Icon => Summary.Locked ? "🔒" : Kind switch { ClipKind.Text => "≡", ClipKind.Link => "↗", ClipKind.Image => "▧", _ => "▱" };
     public string Meta => $"{Source}  ·  {Updated.LocalDateTime:MMM d, HH:mm}  ·  {Bytes.SizeLabel()}" + (Summary.CaptureNote is null ? "" : "  ·  Plain text saved");
     public string PinLabel => Pinned ? "★" : "☆";
     public override string ToString() => Title;

@@ -35,7 +35,8 @@
 - **Pick excluded apps:** select an open app or browse to its program, with removable entries instead of a semicolon-separated text field.
 - **Windows history controls:** Automatic, Always on, Always off, or Leave unchanged, with policy restriction detection.
 - **Friendly installer:** per-user setup, desktop/startup choices, Start menu entry, upgrade support, and Windows Apps uninstall.
-- **Manual updates:** Settings → Check for updates, or Open releases. No scheduled checks, automatic downloads or automatic installs.
+- **Update prompt:** a few seconds after start, Clipboard Plus checks GitHub Releases. If a newer version exists it offers **Update now** or **Later**, with a tick box *Don't remind me again until the next version*. Update now downloads the installer, verifies its SHA-256 against the release's `SHA256SUMS.txt`, closes the app, installs silently and reopens it. Nothing is downloaded or installed without your click; offline checks stay silent. Settings → Check for updates remains available.
+- **Sensitive content protection (Settings):** detects card numbers (checksum-verified), IBANs, API keys, GitHub/AWS tokens, JWTs, private keys and labelled passwords locally. Choose *Don't save* or *Lock with a password*. Locked items are encrypted so only your password (typed twice at creation, 8+ characters) or the one-time **recovery code** opens them; they show as a 🔒 row with no preview and are not searchable. **Save the recovery code somewhere safe — nobody, including the developer, can recover it.** If both are lost, *Reset password* permanently deletes every protected item after an explicit DELETE confirmation; the rest of your history is untouched. Items you pin or create as snippets are never screened.
 - **New icon:** a clipboard with a mint plus badge, rendered at seven sizes for Windows and the tray.
 
 
@@ -47,7 +48,7 @@ A native Windows clipboard history app built with .NET 10, WPF, Windows clipboar
 
 [Browse every release and its notes](https://github.com/kosherplay-betatester/Clip-Board-Plus/releases). Requires Windows 10 version 2004 or later / Windows 11, x64.
 
-Download **ClipboardPlus-Setup-1.1.6-win-x64.exe** from GitHub Releases and follow the setup wizard. It installs for your Windows account without administrator privileges and offers a desktop shortcut, optional startup at sign-in, and launch on completion. Updates reuse the same installation; your separate clipboard history is preserved. Uninstall through Windows Apps.
+Download **ClipboardPlus-Setup-1.2.0-win-x64.exe** from GitHub Releases and follow the setup wizard. It installs for your Windows account without administrator privileges and offers a desktop shortcut, optional startup at sign-in, and launch on completion. Updates reuse the same installation; your separate clipboard history is preserved. Uninstall through Windows Apps.
 
 **1.1.5 fixes garbled `??????` text copied from Chrome (and repairs saved clips), and also fixes black/transparent images copied from Telegram (and repairs the ones already saved), retries clipboard captures that were silently dropped, pastes a multi-item selection directly, and fits at least five clips in the window at 100% and 175% scaling on a 1080p display.** Earlier releases added exact-code handling, the fixed Actions menu, and stable selection. It repairs existing blank text previews, recovers text from HTML/RTF-only copies, keeps rows stable while you choose a clip, and separates queued paste from normal Paste/Enter. Use Settings → Check for updates or download the new installer. Setup asks before closing a running app and keeps it running if you decline. Silent setup will not close a running app automatically.
 
@@ -158,8 +159,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [SECURITY.m
 Install Inno Setup 6 on the build machine (it is not an app dependency), then:
 
 ```powershell
-./scripts/Publish.ps1 -OutputRoot artifacts/releases/v1.1.6
+./scripts/Publish.ps1 -OutputRoot artifacts/releases/v1.2.0
 ./scripts/Build-Installer.ps1
 ```
 
-The installer and portable ZIP are written to `artifacts/releases/v1.1.6/`. Installer artwork lives under `installer/assets/`; regenerate it with the built app's `--write-installer-art installer/assets` command. `Build-Installer.ps1 -InstallerTest` creates an isolated test product with a separate App ID, shortcuts, and startup registry value; this test installer is never distributed.
+The installer and portable ZIP are written to `artifacts/releases/v1.2.0/`. Installer artwork lives under `installer/assets/`; regenerate it with the built app's `--write-installer-art installer/assets` command. `Build-Installer.ps1 -InstallerTest` creates an isolated test product with a separate App ID, shortcuts, and startup registry value; this test installer is never distributed.

@@ -15,8 +15,11 @@ public sealed record AppSettings
     public bool HideAfterPaste { get; init; } = true;
     public string ExcludedApps { get; init; } = "1Password;Bitwarden;KeePass;KeePassXC;LastPass";
     public string Theme { get; init; } = "Dark";
+    public string SensitiveMode { get; init; } = "Off"; // Off | Skip | Lock
+    public string SkippedUpdateVersion { get; init; } = ""; // "Don't remind me" until a newer version than this appears
     public void Validate()
     {
+        if (SensitiveMode is not ("Off" or "Skip" or "Lock")) throw new ArgumentException("Choose a sensitive-content option.");
         if (WindowsHistoryMode is not ("Automatic" or "On" or "Off" or "Unchanged")) throw new ArgumentException("Choose a Windows history preference.");
         if (MaxItems is < 100 or > 1000000) throw new ArgumentException("History capacity must be between 100 and 1,000,000 items.");
         if (RetentionDays is < 1 or > 3650) throw new ArgumentException("Retention must be between 1 and 3,650 days.");

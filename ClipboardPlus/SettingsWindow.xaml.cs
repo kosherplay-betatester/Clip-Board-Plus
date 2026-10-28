@@ -22,6 +22,7 @@ public partial class SettingsWindow : Window
         ItemsBox.Text = settings.MaxItems.ToString(); DaysBox.Text = settings.RetentionDays.ToString(); DiskBox.Text = settings.DiskBudgetMb.ToString(); CacheBox.Text = settings.CacheBudgetMb.ToString(); ItemBox.Text = settings.MaxItemMb.ToString();
         foreach (var name in settings.ExcludedApps.Split([';', ',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase)) excluded.Add(name);
         ExcludedList.ItemsSource = excluded; ThemeBox.SelectedIndex = settings.Theme == "Light" ? 1 : 0;
+        SensitiveModeBox.SelectedIndex = settings.SensitiveMode switch { "Skip" => 1, "Lock" => 2, _ => 0 }; UpdateVaultPanels();
         Loaded += async (_, _) => await UpdateUsage();
         Closed += (_, _) => updatesCancellation.Cancel();
     }
@@ -74,12 +75,41 @@ public partial class SettingsWindow : Window
                 ReplaceWinV = WinV.IsChecked == true, Hotkey = HotkeyBox.Text.Trim(), StartWithWindows = StartupBox.IsChecked == true, HideAfterPaste = HideBox.IsChecked == true,
                 WindowsHistoryMode = WindowsHistoryBox.SelectedIndex switch { 1 => "On", 2 => "Off", 3 => "Unchanged", _ => "Automatic" }, WindowsHistoryManaged = true,
                 MaxItems = Read(ItemsBox, "history capacity"), RetentionDays = Read(DaysBox, "retention"), DiskBudgetMb = Read(DiskBox, "disk budget"), CacheBudgetMb = Read(CacheBox, "cache budget"), MaxItemMb = Read(ItemBox, "clip size"),
+                SensitiveMode = SensitiveModeBox.SelectedIndex switch { 1 => "Skip", 2 => "Lock", _ => "Off" },
                 ExcludedApps = string.Join(';', excluded), Theme = ThemeBox.SelectedIndex == 1 ? "Light" : "Dark"
             };
+            if (result.SensitiveMode == "Lock" && !store.Vault.Exists) throw new ArgumentException("Create a password in the Sensitive content section first, then save.");
             await save(result); DialogResult = true;
         }
         catch (Exception error) { ErrorLabel.Text = error.Message; }
     }
+    private void UpdateVaultPanels()
+    {
+        bool lockMode = SensitiveModeBox.SelectedIndex == 2, exists = store.Vault.Exists;
+        VaultSetupPanel.Visibility = lockMode && !exists ? Visibility.Visible : Visibility.Collapsed;
+        VaultManagePanel.Visibility = lockMode && exists ? Visibility.Visible : Visibility.Collapsed;
+        VaultStatus.Text = store.Vault.IsUnlocked ? "Password protection is on. Locked items are currently unlocked and relock after 5 minutes." : "Password protection is on. Locked items stay hidden until you enter your password.";
+    }
+    private void SensitiveMode_Changed(object sender, SelectionChangedEventArgs e) { if (VaultSetupPanel is not null) UpdateVaultPanels(); }
+    private void CreateVault_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var code = store.Vault.Create(NewPassword.Password, ConfirmPassword.Password);
+            NewPassword.Clear(); ConfirmPassword.Clear();
+            VaultDialogs.ShowRecoveryCode(this, code); UpdateVaultPanels();
+            ErrorLabel.Text = "Password created. Choose Save settings to turn protection on.";
+        }
+        catch (Exception error) { ErrorLabel.Text = error.Message; }
+    }
+    private void ChangePassword_Click(object sender, RoutedEventArgs e) { if (VaultDialogs.ChangePassword(this, store.Vault)) ErrorLabel.Text = "Password changed. Your recovery code still works."; }
+    private void ForgotPassword_Click(object sender, RoutedEventArgs e)
+    {
+        bool recovered = VaultDialogs.Forgot(this, store.Vault, store);
+        UpdateVaultPanels();
+        ErrorLabel.Text = recovered ? "Password reset with your recovery code. Your locked items are intact." : !store.Vault.Exists ? "Password removed and protected items deleted. Create a new password to keep using locked storage." : "";
+    }
+    private void LockNow_Click(object sender, RoutedEventArgs e) { store.Vault.Lock(); UpdateVaultPanels(); ErrorLabel.Text = "Sensitive items are locked."; }
     private void Cancel_Click(object sender, RoutedEventArgs e) => Close();
     private void WindowsSettings_Click(object sender, RoutedEventArgs e) => Process.Start(new ProcessStartInfo("ms-settings:clipboard") { UseShellExecute = true });
     private async Task Clear(bool all)
