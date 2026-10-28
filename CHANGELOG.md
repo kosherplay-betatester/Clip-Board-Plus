@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.6 — 2026-10-28
+
+- Larger, clearer Minimize and Close buttons (46×32) with hover and keyboard-focus highlight; Close turns red on hover.
+
 ## 1.1.5 — 2026-10-28
 
 - **Hebrew/Unicode text shown as `??????`.** When the plain-text slot of a copy (seen with Chrome) was the lossy ANSI form, the saved text was all question marks even though the HTML held the real text. Capture now prefers the faithful text from the HTML/RTF in that case and only falls back to ANSI when nothing better exists. Genuine question marks are never replaced unless the rich data holds different non-ASCII text.

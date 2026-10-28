@@ -6,7 +6,7 @@
   <Grid.RowDefinitions><RowDefinition Height="36"/><RowDefinition Height="*"/><RowDefinition Height="24"/></Grid.RowDefinitions>
   <Grid Background="{DynamicResource SidebarBrush}">
    <StackPanel Orientation="Horizontal" Margin="20,0" VerticalAlignment="Center"><Image Source="{Binding Icon, RelativeSource={RelativeSource AncestorType=Window}}" Width="30" Height="30"/><TextBlock Text="Clipboard Plus" Margin="10,0" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center"/><TextBlock Text="YOUR IDEAS, WITHIN REACH" Foreground="{DynamicResource MutedBrush}" FontSize="9" Margin="16,0" VerticalAlignment="Center"/></StackPanel>
-   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="8" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Button Content="—" Width="38" Padding="0" Background="Transparent" BorderThickness="0" Click="Minimize_Click" ToolTip="Minimize"/><Button Content="×" Width="38" Padding="0" Background="Transparent" BorderThickness="0" Click="Hide_Click" ToolTip="Hide to tray (Esc)"/></StackPanel>
+   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Button Content="&#x2013;" FontSize="18" Style="{StaticResource CaptionButton}" Click="Minimize_Click" ToolTip="Minimize" AutomationProperties.Name="Minimize"/><Button Content="&#x2715;" Style="{StaticResource CloseCaptionButton}" Margin="2,0,0,0" Click="Hide_Click" ToolTip="Hide to tray (Esc)" AutomationProperties.Name="Close to tray"/></StackPanel>
   </Grid>
   <Grid Grid.Row="1">
    <Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
